@@ -1,8 +1,3 @@
-#!/usr/bin/python
-# Args:
-#   1: packet length
-#   2: username
-#   3: command to run
 import sys
 import warnings
 import subprocess
