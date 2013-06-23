@@ -68,6 +68,12 @@ def UDP_test (PacketLength, RemoteHostIP, LocalHostIP):
     NetperfOtputs = netperf.stdout.readlines()
     return NetperfOtputs[-3].split()[-1], NetperfOtputs[-2].split()[-1]
 
+def TCP_test (RemoteHostIP, LocalHostIP):
+    NetperfOtputs = []
+    netperf = subprocess.Popen("netperf -H " + str(RemoteHostIP) + " -L " + str(LocalHostIP) + " -t TCP_STREAM" + " -i 5,5 " + "-l 20", shell=True, executable='/bin/bash', stdout=subprocess.PIPE)
+    NetperfOtputs = netperf.stdout.readlines()
+    return NetperfOtputs[-1].split()[-1]
+
 def GetVmstatFiles (Hostname, Port, Username, Password, LocalFile, RemoteFile):
     s = paramiko.SSHClient()
     s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -131,7 +137,31 @@ def GeneralUDPTest (PacketLength, RemoteTrafficGeneratorMachineIP, LocalTrafficG
         #Stop Vmstat
         StopVmstat (hostname_s1, port, username, password)
         StopVmstat (hostname_s2, port, username, password)
+		
+def GeneralTCPTest (RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP):
+        #Start Vmstat
+        vmstat_current_pid_os_s1 = StartVmstat(hostname_s1, port, username, password, RemoteFileVmstatS1)
+        vmstat_current_pid_on_s2 = StartVmstat(hostname_s2, port, username, password, RemoteFileVmstatS2)
+        #print vmstat_current_pid_os_s1
+        #print vmstat_current_pid_on_s2
+        #Start Netperf test
+        Speed = TCP_test (RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP)
+        print "Test TCP"
+        print Speed, "Throughput 10^6bits/sec"
+        #Get Vmstat files
+        GetVmstatFiles(hostname_s1, port, username, password, LocalFileVmstatS1, RemoteFileVmstatS1)
+        GetVmstatFiles(hostname_s2, port, username, password, LocalFileVmstatS2, RemoteFileVmstatS2)
+        #Parse CPU load
+        cpu_load_on_site1 = ParsingVmstatOutput(LocalFileVmstatS1)
+        cpu_load_on_site2 = ParsingVmstatOutput(LocalFileVmstatS2)
+        print cpu_load_on_site1, "CPU load on Site_1"
+        print cpu_load_on_site2, "CPU load on Site_2"
+        print
+        #Stop Vmstat
+        StopVmstat (hostname_s1, port, username, password)
+        StopVmstat (hostname_s2, port, username, password)
 
 GeneralUDPTest (UDP1400, RemTrafGenMachineIP, LocTrafGenMachineIP)
 GeneralUDPTest (UDP512, RemTrafGenMachineIP, LocTrafGenMachineIP)
 GeneralUDPTest (UDP64, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralTCPTest (RemTrafGenMachineIP, LocTrafGenMachineIP)
