@@ -1,4 +1,5 @@
 #!/usr/bin/python
+import time
 import sys
 import warnings
 import subprocess
@@ -83,85 +84,129 @@ def GetVmstatFiles (Hostname, Port, Username, Password, LocalFile, RemoteFile):
     s.close()
 
 def ParsingVmstatOutput (LocalFile):
-        vmstat_out =[]
-        cpu_load = []
-        true_cpu_load =[]
-        # open file with Vmstat output
-        file = open(LocalFile, 'r')
-        vmstat_out = file.readlines()
-        #head not read
-        for line in vmstat_out[3:-1:]:
-                #parsing CPU (numbers) load and add their to list
-                cpu_load.append(float(line.split()[13]))
+    vmstat_out =[]
+    cpu_load = []
+    true_cpu_load =[]
+    # open file with Vmstat output
+    file = open(LocalFile, 'r')
+    vmstat_out = file.readlines()
+    #head not read
+    for line in vmstat_out[3:-1:]:
+        #parsing CPU (numbers) load and add their to list
+        cpu_load.append(float(line.split()[13]))
 
-        #delete zeros and ones
-        if cpu_load.count(0.0) != 0:
-                count_zeros = cpu_load.count(0.0)
-                for i in range(count_zeros):
-                        cpu_load.remove(0.0)
+    #delete zeros and ones
+    if cpu_load.count(0.0) != 0:
+        count_zeros = cpu_load.count(0.0)
+        for i in range(count_zeros):
+            cpu_load.remove(0.0)
 
-        if cpu_load.count(1.0) != 0:
-                count_ones = cpu_load.count(1.0)
-                for i in range(count_ones):
-                        cpu_load.remove(1.0)
+    if cpu_load.count(1.0) != 0:
+        count_ones = cpu_load.count(1.0)
+        for i in range(count_ones):
+            cpu_load.remove(1.0)
 
-        #find approximate average of CPU load
-        avg = sum(cpu_load)/float(len(cpu_load))
+    #find approximate average of CPU load
+    avg = sum(cpu_load)/float(len(cpu_load))
 
-        #create new list where items > approximate average
-        for i in cpu_load:
-                if i > avg:
-                        true_cpu_load.append(i)
-        return sum(true_cpu_load)/float(len(true_cpu_load))
+    #create new list where items > approximate average
+    for i in cpu_load:
+        if i > avg:
+            true_cpu_load.append(i)
+    return sum(true_cpu_load)/float(len(true_cpu_load))
+
+def RestartVpnDaemon (Hostname, Port, Username, Password):
+    restart_daemon = "/etc/init.d/vpndrv stop; /etc/init.d/vpndrv start; /etc/init.d/vpngate start"
+    paramiko.util.log_to_file('paramiko.log')
+    s = paramiko.SSHClient()
+    s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    s.connect(Hostname, Port, Username, Password)
+    stdin, stdout, stderr = s.exec_command(restart_daemon)
+    daemon_out = stdout.readlines()
+    #for line in daemon_out:
+        #print line.strip()
+
+def NuttcpUDP_test (Mbps, PacketLength, RemoteHostIP):
+    min_Mbps_without_loss = 0
+    max_Mbps_with_loss = 0
+    max_speed_without_loss = 0
+    i = 15
+    while i != 0:
+        nuttcp = subprocess.Popen("nuttcp -u -i 5 -T 10" + " -R " + str(Mbps) + "M" + " -l " + str(PacketLength) + " " + str(RemoteHostIP), shell=True, executable='/bin/bash', stdout=subprocess.PIPE)
+        nuttcpOtputs = nuttcp.stdout.readlines()
+        speed_without_loss = nuttcpOtputs[-1].split()[6]
+        if float(speed_without_loss) > float(max_speed_without_loss):
+            max_speed_without_loss = speed_without_loss
+        loss = nuttcpOtputs[-1].split()[-2]
+        #print Mbps, "GenMbps"
+        #print speed_without_loss, "Mbps"
+        #print loss, "Loss"
+        #print
+        if float(loss) > 1:
+            max_Mbps_with_loss = Mbps
+            Mbps = (float(Mbps) + float(min_Mbps_without_loss)) / 2
+        else:
+            min_Mbps_without_loss = Mbps
+            Mbps = (float(Mbps) + float(max_Mbps_with_loss)) / 2
+        i = i - 1
+    return max_speed_without_loss
 
 def GeneralUDPTest (PacketLength, RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP):
-        #Start Vmstat
-        vmstat_current_pid_os_s1 = StartVmstat(hostname_s1, port, username, password, RemoteFileVmstatS1)
-        vmstat_current_pid_on_s2 = StartVmstat(hostname_s2, port, username, password, RemoteFileVmstatS2)
-        #print vmstat_current_pid_os_s1
-        #print vmstat_current_pid_on_s2
-        #Start Netperf test
-        MaxSpeed, SpeedWithoutLoss = UDP_test (PacketLength, RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP)
-        print "Test UDP, PacketLength is ", PacketLength
-        print MaxSpeed, "Throughput max 10^6bits/sec"
-        print SpeedWithoutLoss, "Throughput without loss 10^6bits/sec"
-        #Get Vmstat files
-        GetVmstatFiles(hostname_s1, port, username, password, LocalFileVmstatS1, RemoteFileVmstatS1)
-        GetVmstatFiles(hostname_s2, port, username, password, LocalFileVmstatS2, RemoteFileVmstatS2)
-        #Parse CPU load
-        cpu_load_on_site1 = ParsingVmstatOutput(LocalFileVmstatS1)
-        cpu_load_on_site2 = ParsingVmstatOutput(LocalFileVmstatS2)
-        print cpu_load_on_site1, "CPU load on Site_1"
-        print cpu_load_on_site2, "CPU load on Site_2"
-        print
-        #Stop Vmstat
-        StopVmstat (hostname_s1, port, username, password)
-        StopVmstat (hostname_s2, port, username, password)
-		
+    #Start Vmstat
+    vmstat_current_pid_on_s1 = StartVmstat(hostname_s1, port, username, password, RemoteFileVmstatS1)
+    vmstat_current_pid_on_s2 = StartVmstat(hostname_s2, port, username, password, RemoteFileVmstatS2)
+    #print vmstat_current_pid_on_s1
+    #print vmstat_current_pid_on_s2
+    #Start Netperf test
+    MaxSpeed, SpeedWithoutLoss = UDP_test (PacketLength, RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP)
+    print "Test UDP, PacketLength is ", PacketLength
+    print MaxSpeed, "Throughput max 10^6bits/sec"
+    print SpeedWithoutLoss, "Throughput without loss 10^6bits/sec"
+    #Stop Vmstat
+    StopVmstat (hostname_s1, port, username, password)
+    StopVmstat (hostname_s2, port, username, password)
+	#Get Vmstat files
+    GetVmstatFiles(hostname_s1, port, username, password, LocalFileVmstatS1, RemoteFileVmstatS1)
+    GetVmstatFiles(hostname_s2, port, username, password, LocalFileVmstatS2, RemoteFileVmstatS2)
+    #Parse CPU load
+    cpu_load_on_site1 = ParsingVmstatOutput(LocalFileVmstatS1)
+    cpu_load_on_site2 = ParsingVmstatOutput(LocalFileVmstatS2)
+    print cpu_load_on_site1, "CPU load on Site_1"
+    print cpu_load_on_site2, "CPU load on Site_2"
+    print
+    time.sleep(1)
+
 def GeneralTCPTest (RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP):
-        #Start Vmstat
-        vmstat_current_pid_os_s1 = StartVmstat(hostname_s1, port, username, password, RemoteFileVmstatS1)
-        vmstat_current_pid_on_s2 = StartVmstat(hostname_s2, port, username, password, RemoteFileVmstatS2)
-        #print vmstat_current_pid_os_s1
-        #print vmstat_current_pid_on_s2
-        #Start Netperf test
-        Speed = TCP_test (RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP)
-        print "Test TCP"
-        print Speed, "Throughput 10^6bits/sec"
-        #Get Vmstat files
-        GetVmstatFiles(hostname_s1, port, username, password, LocalFileVmstatS1, RemoteFileVmstatS1)
-        GetVmstatFiles(hostname_s2, port, username, password, LocalFileVmstatS2, RemoteFileVmstatS2)
-        #Parse CPU load
-        cpu_load_on_site1 = ParsingVmstatOutput(LocalFileVmstatS1)
-        cpu_load_on_site2 = ParsingVmstatOutput(LocalFileVmstatS2)
-        print cpu_load_on_site1, "CPU load on Site_1"
-        print cpu_load_on_site2, "CPU load on Site_2"
-        print
-        #Stop Vmstat
-        StopVmstat (hostname_s1, port, username, password)
-        StopVmstat (hostname_s2, port, username, password)
+    #Start Vmstat
+    vmstat_current_pid_on_s1 = StartVmstat(hostname_s1, port, username, password, RemoteFileVmstatS1)
+    vmstat_current_pid_on_s2 = StartVmstat(hostname_s2, port, username, password, RemoteFileVmstatS2)
+    #print vmstat_current_pid_on_s1
+    #print vmstat_current_pid_on_s2
+    #Start Netperf test
+    Speed = TCP_test (RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP)
+    print "Test TCP"
+    print Speed, "Throughput 10^6bits/sec"
+	#Stop Vmstat
+    StopVmstat (hostname_s1, port, username, password)
+    StopVmstat (hostname_s2, port, username, password)
+    #Get Vmstat files
+    GetVmstatFiles(hostname_s1, port, username, password, LocalFileVmstatS1, RemoteFileVmstatS1)
+    GetVmstatFiles(hostname_s2, port, username, password, LocalFileVmstatS2, RemoteFileVmstatS2)
+    #Parse CPU load
+    cpu_load_on_site1 = ParsingVmstatOutput(LocalFileVmstatS1)
+    cpu_load_on_site2 = ParsingVmstatOutput(LocalFileVmstatS2)
+    print cpu_load_on_site1, "CPU load on Site_1"
+    print cpu_load_on_site2, "CPU load on Site_2"
+    print
+    time.sleep(1)
 
 GeneralUDPTest (UDP1400, RemTrafGenMachineIP, LocTrafGenMachineIP)
 GeneralUDPTest (UDP512, RemTrafGenMachineIP, LocTrafGenMachineIP)
 GeneralUDPTest (UDP64, RemTrafGenMachineIP, LocTrafGenMachineIP)
 GeneralTCPTest (RemTrafGenMachineIP, LocTrafGenMachineIP)
+Mbps = NuttcpUDP_test (1000, UDP1400, RemTrafGenMachineIP)
+print Mbps, "1400"
+Mbps = NuttcpUDP_test (1000, UDP512, RemTrafGenMachineIP)
+print Mbps, "512"
+Mbps = NuttcpUDP_test (1000, UDP64, RemTrafGenMachineIP)
+print Mbps, "64"
