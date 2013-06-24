@@ -18,6 +18,7 @@ LocalFileVmstatS1 = '/root/vmstat_s1'
 RemoteFileVmstatS1 = '/root/vmstat_s1'
 LocalFileVmstatS2 = '/root/vmstat_s2'
 RemoteFileVmstatS2 = '/root/vmstat_s2'
+StartMbpsForNuttcp = 1000
 UDP1400 = 1400
 UDP512 = 512
 UDP64 = 64
@@ -63,13 +64,13 @@ def StopVmstat (Hostname, Port, Username, Password):
             stdin, stdout, stderr = s.exec_command("kill " + str(i))
     s.close()
 
-def UDP_test (PacketLength, RemoteHostIP, LocalHostIP):
+def NetperfUDP_test (PacketLength, RemoteHostIP, LocalHostIP):
     NetperfOtputs = []
     netperf = subprocess.Popen("netperf -H " + str(RemoteHostIP) + " -L " + str(LocalHostIP) + " -t UDP_STREAM" + " -i 5,5 " + "-l 20" + " -- " + " -m " + str(PacketLength) + " -M " + str(PacketLength), shell=True, executable='/bin/bash', stdout=subprocess.PIPE)
     NetperfOtputs = netperf.stdout.readlines()
     return NetperfOtputs[-3].split()[-1], NetperfOtputs[-2].split()[-1]
 
-def TCP_test (RemoteHostIP, LocalHostIP):
+def NetperfTCP_test (RemoteHostIP, LocalHostIP):
     NetperfOtputs = []
     netperf = subprocess.Popen("netperf -H " + str(RemoteHostIP) + " -L " + str(LocalHostIP) + " -t TCP_STREAM" + " -i 5,5 " + "-l 20", shell=True, executable='/bin/bash', stdout=subprocess.PIPE)
     NetperfOtputs = netperf.stdout.readlines()
@@ -151,42 +152,18 @@ def NuttcpUDP_test (Mbps, PacketLength, RemoteHostIP):
         i = i - 1
     return max_speed_without_loss
 
-def GeneralUDPTest (PacketLength, RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP):
+def GeneralNetperfUDPTest (PacketLength, RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP):
     #Start Vmstat
     vmstat_current_pid_on_s1 = StartVmstat(hostname_s1, port, username, password, RemoteFileVmstatS1)
     vmstat_current_pid_on_s2 = StartVmstat(hostname_s2, port, username, password, RemoteFileVmstatS2)
     #print vmstat_current_pid_on_s1
     #print vmstat_current_pid_on_s2
     #Start Netperf test
-    MaxSpeed, SpeedWithoutLoss = UDP_test (PacketLength, RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP)
-    print "Test UDP, PacketLength is ", PacketLength
+    MaxSpeed, SpeedWithoutLoss = NetperfUDP_test (PacketLength, RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP)
+    print "Test Netperf UDP, PacketLength is ", PacketLength
     print MaxSpeed, "Throughput max 10^6bits/sec"
     print SpeedWithoutLoss, "Throughput without loss 10^6bits/sec"
     #Stop Vmstat
-    StopVmstat (hostname_s1, port, username, password)
-    StopVmstat (hostname_s2, port, username, password)
-	#Get Vmstat files
-    GetVmstatFiles(hostname_s1, port, username, password, LocalFileVmstatS1, RemoteFileVmstatS1)
-    GetVmstatFiles(hostname_s2, port, username, password, LocalFileVmstatS2, RemoteFileVmstatS2)
-    #Parse CPU load
-    cpu_load_on_site1 = ParsingVmstatOutput(LocalFileVmstatS1)
-    cpu_load_on_site2 = ParsingVmstatOutput(LocalFileVmstatS2)
-    print cpu_load_on_site1, "CPU load on Site_1"
-    print cpu_load_on_site2, "CPU load on Site_2"
-    print
-    time.sleep(1)
-
-def GeneralTCPTest (RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP):
-    #Start Vmstat
-    vmstat_current_pid_on_s1 = StartVmstat(hostname_s1, port, username, password, RemoteFileVmstatS1)
-    vmstat_current_pid_on_s2 = StartVmstat(hostname_s2, port, username, password, RemoteFileVmstatS2)
-    #print vmstat_current_pid_on_s1
-    #print vmstat_current_pid_on_s2
-    #Start Netperf test
-    Speed = TCP_test (RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP)
-    print "Test TCP"
-    print Speed, "Throughput 10^6bits/sec"
-	#Stop Vmstat
     StopVmstat (hostname_s1, port, username, password)
     StopVmstat (hostname_s2, port, username, password)
     #Get Vmstat files
@@ -200,13 +177,70 @@ def GeneralTCPTest (RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachin
     print
     time.sleep(1)
 
-GeneralUDPTest (UDP1400, RemTrafGenMachineIP, LocTrafGenMachineIP)
-GeneralUDPTest (UDP512, RemTrafGenMachineIP, LocTrafGenMachineIP)
-GeneralUDPTest (UDP64, RemTrafGenMachineIP, LocTrafGenMachineIP)
-GeneralTCPTest (RemTrafGenMachineIP, LocTrafGenMachineIP)
-Mbps = NuttcpUDP_test (1000, UDP1400, RemTrafGenMachineIP)
-print Mbps, "1400"
-Mbps = NuttcpUDP_test (1000, UDP512, RemTrafGenMachineIP)
-print Mbps, "512"
-Mbps = NuttcpUDP_test (1000, UDP64, RemTrafGenMachineIP)
-print Mbps, "64"
+def GeneralNetperfTCPTest (RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP):
+    #Start Vmstat
+    vmstat_current_pid_on_s1 = StartVmstat(hostname_s1, port, username, password, RemoteFileVmstatS1)
+    vmstat_current_pid_on_s2 = StartVmstat(hostname_s2, port, username, password, RemoteFileVmstatS2)
+    #print vmstat_current_pid_on_s1
+    #print vmstat_current_pid_on_s2
+    #Start Netperf test
+    Speed = NetperfTCP_test (RemoteTrafficGeneratorMachineIP, LocalTrafficGeneratorMachineIP)
+    print "Test Netperf TCP"
+    print Speed, "Throughput 10^6bits/sec"
+    #Stop Vmstat
+    StopVmstat (hostname_s1, port, username, password)
+    StopVmstat (hostname_s2, port, username, password)
+    #Get Vmstat files
+    GetVmstatFiles(hostname_s1, port, username, password, LocalFileVmstatS1, RemoteFileVmstatS1)
+    GetVmstatFiles(hostname_s2, port, username, password, LocalFileVmstatS2, RemoteFileVmstatS2)
+    #Parse CPU load
+    cpu_load_on_site1 = ParsingVmstatOutput(LocalFileVmstatS1)
+    cpu_load_on_site2 = ParsingVmstatOutput(LocalFileVmstatS2)
+    print cpu_load_on_site1, "CPU load on Site_1"
+    print cpu_load_on_site2, "CPU load on Site_2"
+    print
+    time.sleep(1)
+def GeneralNuttcpUDPTest (StartMbps, PacketLength, RemoteTrafficGeneratorMachineIP):
+    #Start Vmstat
+    vmstat_current_pid_on_s1 = StartVmstat(hostname_s1, port, username, password, RemoteFileVmstatS1)
+    vmstat_current_pid_on_s2 = StartVmstat(hostname_s2, port, username, password, RemoteFileVmstatS2)
+    Speed = NuttcpUDP_test (StartMbps, PacketLength, RemoteTrafficGeneratorMachineIP)
+    print Speed, "Mbps, PacketLength is", PacketLength
+    #Get Vmstat files
+    GetVmstatFiles(hostname_s1, port, username, password, LocalFileVmstatS1, RemoteFileVmstatS1)
+    GetVmstatFiles(hostname_s2, port, username, password, LocalFileVmstatS2, RemoteFileVmstatS2)
+    #Parse CPU load
+    cpu_load_on_site1 = ParsingVmstatOutput(LocalFileVmstatS1)
+    cpu_load_on_site2 = ParsingVmstatOutput(LocalFileVmstatS2)
+    print cpu_load_on_site1, "CPU load on Site_1"
+    print cpu_load_on_site2, "CPU load on Site_2"
+    print
+    time.sleep(1)
+GeneralNuttcpUDPTest (StartMbpsForNuttcp, UDP1400, RemTrafGenMachineIP)
+GeneralNuttcpUDPTest (StartMbpsForNuttcp, UDP512, RemTrafGenMachineIP)
+GeneralNuttcpUDPTest (StartMbpsForNuttcp, UDP64, RemTrafGenMachineIP)
+GeneralNetperfUDPTest (UDP1400, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfUDPTest (UDP512, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfUDPTest (UDP64, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfTCPTest (RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNuttcpUDPTest (StartMbpsForNuttcp, UDP1400, RemTrafGenMachineIP)
+GeneralNuttcpUDPTest (StartMbpsForNuttcp, UDP512, RemTrafGenMachineIP)
+GeneralNuttcpUDPTest (StartMbpsForNuttcp, UDP64, RemTrafGenMachineIP)
+GeneralNetperfUDPTest (UDP1400, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfUDPTest (UDP512, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfUDPTest (UDP64, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfTCPTest (RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNuttcpUDPTest (StartMbpsForNuttcp, UDP1400, RemTrafGenMachineIP)
+GeneralNuttcpUDPTest (StartMbpsForNuttcp, UDP512, RemTrafGenMachineIP)
+GeneralNuttcpUDPTest (StartMbpsForNuttcp, UDP64, RemTrafGenMachineIP)
+GeneralNetperfUDPTest (UDP1400, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfUDPTest (UDP512, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfUDPTest (UDP64, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfTCPTest (RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNuttcpUDPTest (StartMbpsForNuttcp, UDP1400, RemTrafGenMachineIP)
+GeneralNuttcpUDPTest (StartMbpsForNuttcp, UDP512, RemTrafGenMachineIP)
+GeneralNuttcpUDPTest (StartMbpsForNuttcp, UDP64, RemTrafGenMachineIP)
+GeneralNetperfUDPTest (UDP1400, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfUDPTest (UDP512, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfUDPTest (UDP64, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfTCPTest (RemTrafGenMachineIP, LocTrafGenMachineIP)
