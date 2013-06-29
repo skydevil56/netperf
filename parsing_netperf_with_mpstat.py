@@ -131,18 +131,22 @@ def ParsingMpstatOutput (MpstatFile,RegExp):
     cpu_load = []
     true_cpu_load = []
     mpstat_out_after_not_match_regexp = []
+    #open Mpstat output files
     file = open(MpstatFile, 'r')
     mpstat_out = file.readlines()
+    #create new list without mpstat header
     for line in mpstat_out:
         if not RegExp.match(line):
             mpstat_out_after_not_match_regexp.append(line)
-    #head not read
-    for line in mpstat_out_after_not_match_regexp[2:-1:]:
-        #parsing CPU (numbers) load and add their to list
-        cpu_idle.append(float(line.split()[-1]))
+    #create list with CPU idle values
+    for line in mpstat_out_after_not_match_regexp:
+        #fix bug in mpstat output, when %idle and %sys have same zero value
+        if (float(line.split()[4]) != 0 ) and (float(line.split()[-1]) != 0):
+            #parsing CPU (numbers) load and add their to list
+            cpu_idle.append(float(line.split()[-1]))
+    #create list with CPU load values
     for idle in cpu_idle:
         cpu_load.append(float(100.0 - float(idle)))
-    print "before ", cpu_load
     #delete zeros and ones
     if cpu_load.count(0.0) != 0:
         count_zeros = cpu_load.count(0.0)
@@ -154,7 +158,6 @@ def ParsingMpstatOutput (MpstatFile,RegExp):
             cpu_load.remove(1.0)
     #find approximate average of CPU load
     avg = float(sum(cpu_load))/float(len(cpu_load))
-    print "Average ", avg
     #create new list where items > approximate average
     for i in cpu_load:
         if i > avg:
@@ -243,16 +246,12 @@ def NuttcpUDP_test (Mbps, PacketLength, RemoteHostIP):
     max_speed_without_loss = 0
     i = 15
     while i != 0:
-        nuttcp = subprocess.Popen("nuttcp -u -i 5 -T 10" + " -R " + str(Mbps) + "M" + " -l " + str(PacketLength) + " " + str(RemoteHostIP), shell=True, executable='/bin/bash', stdout=subprocess.PIPE)
+        nuttcp = subprocess.Popen("nuttcp -u -i 5 -T 10" + " -Ri " + str(Mbps) + "M" + " -l " + str(PacketLength) + " " + str(RemoteHostIP), shell=True, executable='/bin/bash', stdout=subprocess.PIPE)
         nuttcpOtputs = nuttcp.stdout.readlines()
         speed_without_loss = nuttcpOtputs[-1].split()[6]
         if float(speed_without_loss) > float(max_speed_without_loss):
             max_speed_without_loss = speed_without_loss
         loss = nuttcpOtputs[-1].split()[-2]
-        #print Mbps, "GenMbps"
-        #print speed_without_loss, "Mbps"
-        #print loss, "Loss"
-        #print
         if float(loss) > 1:
             max_Mbps_with_loss = Mbps
             Mbps = (float(Mbps) + float(min_Mbps_without_loss)) / 2
