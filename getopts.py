@@ -39,7 +39,7 @@ def ParseScriptArguments(argv):
         opts, args = getopt.getopt(argv,"hL:l:R:r:")
     except getopt.GetoptError:
         print
-        print bcolors.WARNING + "Error :" + bcolors.ENDC + " check parameters of script, please see the following syntax:"
+        print bcolors.FAIL + "Error :" + bcolors.ENDC + " check parameters of script, please see the following syntax:"
         print
         print 'name_of_script.py -L <Local traffic generator machine IP> -l <First IPsec Site IP> -R <Remote traffic receiver machine IP> -r <Second IPsec Site IP>'
         print
@@ -69,29 +69,30 @@ def ParseScriptArguments(argv):
     print
     return IPlist
 
-def PingTestForOneIP (IP):
-    ping = sp.Popen("ping -c 1 -w 1 " + str(IP), shell=True, executable='/bin/bash', stdout=sp.PIPE)
-    PingOtputs = ping.communicate()[0]
-    status = ping.returncode
-    print "Status " + str(status) +" of ping IP " + str(IP)
-    return status
-
 def PingTestForIPlist (IPlist):
     number_of_reachable_ip = 0
-    for IP in IPlist:
-        ping = sp.Popen("ping -c 1 -w 1 " + str(IP), shell=True, executable='/bin/bash', stdout=sp.PIPE)
+    if len(IPlist) == 0:
+        print bcolors.FAIL + "Error :" + bcolors.ENDC + " PingTestForIPlist(IPlist), IPlist is Null"
+    if len(IPlist) == 1:
+        ping = sp.Popen("ping -c 1 -w 1 " + str(IPlist[0]), shell=True, executable='/bin/bash', stdout=sp.PIPE)
         PingOtputs = ping.communicate()[0]
         status = ping.returncode
-        if status == 0:
-            number_of_reachable_ip = number_of_reachable_ip +1
+        return status
+    if len(IPlist) > 1:
+        for IP in IPlist:
+            ping = sp.Popen("ping -c 1 -w 1 " + str(IP), shell=True, executable='/bin/bash', stdout=sp.PIPE)
+            PingOtputs = ping.communicate()[0]
+            status = ping.returncode
+            if status == 0:
+                number_of_reachable_ip = number_of_reachable_ip +1
+            else:
+                print bcolors.FAIL + "Error :" + bcolors.ENDC + " IP " + str(IP) + " Unreachable"
+                sys.exit()
+        if (number_of_reachable_ip == len(IPlist)):
+            print "Network test completed successfully"
+            print
         else:
-            print bcolors.WARNING + "Error :" + bcolors.ENDC + " IP " + str(IP) + " Unreachable"
-            sys.exit()
-    if (number_of_reachable_ip == len(IPlist)):
-        print "Network test completed successfully"
-        print
-    else:
-        sys.exit(bcolors.WARNING + "Error :" + bcolors.ENDC + " check the network settings")
+            sys.exit(bcolors.FAIL + "Error :" + bcolors.ENDC + " check the network settings")
         print
     return 0
 
@@ -101,7 +102,7 @@ def NetperfUDP_test (PacketLength, RemoteHostIP, LocalHostIP):
     NetperfOtputs = netperf.communicate()[0].splitlines()
     status = netperf.returncode
     if status != 0:
-        sys.exit(bcolors.WARNING + "Error :" + bcolors.ENDC + " netperf can't connect to the netserver " + str(RemoteHostIP) + " from " + str(LocalHostIP))
+        sys.exit(bcolors.FAIL + "Error :" + bcolors.ENDC + " netperf can't connect to the netserver " + str(RemoteHostIP) + " from " + str(LocalHostIP))
         print
     throughput_max = NetperfOtputs[-3].split()[-1]
     throughput_without_loss = NetperfOtputs[-2].split()[-1]
@@ -113,12 +114,14 @@ def NetperfTCP_test (RemoteHostIP, LocalHostIP):
     NetperfOtputs = netperf.communicate()[0].splitlines()
     status = netperf.returncode
     if status != 0:
-        sys.exit(bcolors.WARNING + "Error :" + bcolors.ENDC + " netperf can't connect to the netserver " + str(RemoteHostIP) + " from " + str(LocalHostIP))
+        sys.exit(bcolors.FAIL + "Error :" + bcolors.ENDC + " netperf can't connect to the netserver " + str(RemoteHostIP) + " from " + str(LocalHostIP))
         print
     throughput_without_loss = NetperfOtputs[-1].split()[-1]
     return throughput_without_loss
 
 def NuttcpUDP_test (Mbps, PacketLength, RemoteHostIP, NumberOfIterations):
+    IPlist = []
+    IPlist.append(RemoteHostIP)
     min_Mbps_without_loss = 0
     max_Mbps_with_loss = 0
     max_speed_without_loss = 0
@@ -130,11 +133,18 @@ def NuttcpUDP_test (Mbps, PacketLength, RemoteHostIP, NumberOfIterations):
         nuttcpOtputs = nuttcp.communicate()[0].splitlines()
         status = nuttcp.returncode
         if status != 0:
-            if PingTestForOneIP(RemoteHostIP) != 0:
-                sys.exit(bcolors.WARNING + "Error :" + bcolors.ENDC + " nuttcp can't connect to the nuttcp server. Cause of the error: remote host " + str(RemoteHostIP) + " Unreachable")
+            if (PingTestForIPlist(IPlist) != 0) and (count_of_failed_attempts > 0):
+                print bcolors.WARNING + "WARNING :" + bcolors.ENDC + " nuttcp can't connect to the nuttcp server. Cause of the warning: remote host " + str(RemoteHostIP) + " Unreachable"
+                print 'Attempts to restore the connection ' + str(count_of_failed_attempts)
+                print
+                time.sleep(3)
+                count_of_failed_attempts = count_of_failed_attempts - 1
+                continue
             else:
-                if PingTestForOneIP(RemoteHostIP) == 0:
-                    sys.exit(bcolors.WARNING + "Error :" + bcolors.ENDC + " nuttcp can't connect to the nuttcp server. Cause of the error: nuttcp server on the remote host " + str(RemoteHostIP) + " not running")
+                if (PingTestForIPlist(IPlist) != 0) and (count_of_failed_attempts <= 0):
+                    sys.exit(bcolors.FAIL + "Error :" + bcolors.ENDC + " nuttcp can't connect to the nuttcp server. Cause of the error: remote host " + str(RemoteHostIP) + " Unreachable")
+                if PingTestForIPlist(IPlist) == 0:
+                    sys.exit(bcolors.FAIL + "Error :" + bcolors.ENDC + " nuttcp can't connect to the nuttcp server. Cause of the error: nuttcp server on the remote host " + str(RemoteHostIP) + " not running")
         speed_without_loss = nuttcpOtputs[-1].split()[6]
         loss_of_current_test = nuttcpOtputs[-1].split()[-2]
         if float(loss_of_current_test) > 1:
@@ -146,11 +156,11 @@ def NuttcpUDP_test (Mbps, PacketLength, RemoteHostIP, NumberOfIterations):
             Mbps = (float(Mbps) + float(max_Mbps_with_loss)) / 2
         i = i - 1
         if tests_with_loss == NumberOfIterations:
-            sys.exit(bcolors.WARNING + "Error :" + bcolors.ENDC + " nuttcp can't find throughput without loss")
+            sys.exit(bcolors.FAIL + "Error :" + bcolors.ENDC + " nuttcp can't find throughput without loss")
     return speed_without_loss, loss_of_current_test
 
 ip_list = ParseScriptArguments(sys.argv[1:])
-PingTestForIPlist(ip_list)
+#PingTestForIPlist(ip_list)
 ##var1, var2 = NetperfUDP_test (1400, RemTrafGenMachineIP, LocTrafGenMachineIP)
 ##print var1
 ##print var2
