@@ -352,7 +352,7 @@ def NuttcpUDP_test (Mbps, PacketLength, RemoteHostIP, NumberOfIterations):
     count_of_failed_attempts = 5
     flag = 0
     while i != 0:
-        nuttcp = sp.Popen("nuttcp -u -T 10" + " -Ri " + str(Mbps) + "M" + " -l " + str(PacketLength) + " " + str(RemoteHostIP), shell=True, executable='/bin/bash', stdout=sp.PIPE)
+        nuttcp = sp.Popen("nuttcp -u -T 20" + " -Ri " + str(Mbps) + "M" + " -l " + str(PacketLength) + " " + str(RemoteHostIP), shell=True, executable='/bin/bash', stdout=sp.PIPE)
         nuttcpOtputs = nuttcp.communicate()[0].splitlines()
         status = nuttcp.returncode
         if status != 0:
@@ -434,7 +434,35 @@ def ParsingMpstatOutput (MpstatFile,RegExp):
             true_cpu_load.append(i)
     return float(sum(true_cpu_load))/float(len(true_cpu_load))
 
-def GeneralNetperfUDPTestWithVmstat (PacketLength, RemoteHostIP, NumberOfIterations):
+def ParsingVmstatOutput (LocalFile):
+    vmstat_out =[]
+    cpu_load = []
+    true_cpu_load =[]
+    # open file with Vmstat output
+    file = open(LocalFile, 'r')
+    vmstat_out = file.readlines()
+    #head not read
+    for line in vmstat_out[3:-1:]:
+        #parsing CPU (numbers) load and add their to list
+        cpu_load.append(float(line.split()[13]))
+    #delete zeros and ones
+    if cpu_load.count(0.0) != 0:
+        count_zeros = cpu_load.count(0.0)
+        for i in range(count_zeros):
+            cpu_load.remove(0.0)
+    if cpu_load.count(1.0) != 0:
+        count_ones = cpu_load.count(1.0)
+        for i in range(count_ones):
+            cpu_load.remove(1.0)
+    #find approximate average of CPU load
+    avg = float(sum(cpu_load))/float(len(cpu_load))
+    #create new list where items > approximate average
+    for i in cpu_load:
+        if i > avg:
+            true_cpu_load.append(i)
+    return float(sum(true_cpu_load))/float(len(true_cpu_load))
+
+def GeneralNuttcpfUDPTestWithMpstat (PacketLength, RemoteHostIP, NumberOfIterations):
     list_of_results_speed = []
     list_of_results_loss = []
     #Start Mpstat
@@ -472,18 +500,98 @@ def GeneralNetperfUDPTestWithVmstat (PacketLength, RemoteHostIP, NumberOfIterati
 ##    avg_loss = (float(sum(list_of_results_loss)))/(float(len(list_of_results_loss)))
     return list_of_results_speed, list_of_results_loss
 
+def GeneralNuttcpUDPTestWithVmstat (PacketLength, RemoteHostIP, NumberOfIterations):
+    list_of_results_speed = []
+    list_of_results_loss = []
+    #Start Vmstat
+    RestartRemoteDaemon(Site_1_IP, port, username, password, 'vmstat', '2 -n', RemoteFileVmstatS1)
+    RestartRemoteDaemon(Site_2_IP, port, username, password, 'vmstat', '2 -n', RemoteFileVmstatS2)
+    #Start Nuttcp test
+    speed, loss, max_speed_without_loss = NuttcpUDP_test(StartMbpsForNuttcp, PacketLength, RemoteHostIP, NumberOfIterations)
+    print
+    print bcolors.HEADER + "Nuttcp UDP test with Vmstat, PacketLength is " + str(PacketLength) + bcolors.ENDC
+    print speed, "Throughput without loss"
+    print loss, "loss"
+    #Stop Vmstat
+    StopRemoteDaemon(Site_1_IP, port, username, password, 'vmstat')
+    StopRemoteDaemon(Site_2_IP, port, username, password, 'vmstat')
+    #Get Vmstat files
+    GetFilesFromRemoteHost(Site_1_IP, port, username, password, LocalFileVmstatS1, RemoteFileVmstatS1)
+    GetFilesFromRemoteHost(Site_2_IP, port, username, password, LocalFileVmstatS2, RemoteFileVmstatS2)
+    #Parse CPU load
+    cpu_load_on_site1 = ParsingVmstatOutput(LocalFileVmstatS1)
+    cpu_load_on_site2 = ParsingVmstatOutput(LocalFileVmstatS2)
+    print cpu_load_on_site1, "CPU load on Site_1 IP is ", Site_1_IP
+    print cpu_load_on_site2, "CPU load on Site_2 IP is ", Site_2_IP
+    print
+    print "Nuttcp UDP test on repeatability of results"
+    for i in range(5):
+        speed, loss, max_speed_without_loss_temp = NuttcpUDP_test(max_speed_without_loss, PacketLength, RemoteHostIP, 1)
+        print
+        print "Nuttcp UDP test with Mpstat, PacketLength is ", PacketLength
+        print speed, "Throughput without loss"
+        print loss, "loss"
+        list_of_results_speed.append(speed)
+        list_of_results_loss.append(loss)
+    time.sleep(1)
+##    avg_speed = (float(sum(list_of_results_speed)))/(float(len(list_of_results_speed)))
+##    avg_loss = (float(sum(list_of_results_loss)))/(float(len(list_of_results_loss)))
+    return list_of_results_speed, list_of_results_loss
+
+def GeneralNetperfUDPTestWithMpstat (PacketLength, RemoteHostIP, LocalHostIP):
+    list_of_results_speed = []
+    list_of_results_loss = []
+    #Start Mpstat
+    RestartRemoteDaemon(Site_1_IP, port, username, password, 'mpstat', "3 -P " + str (GetCpuListForMpstat(GetNumberOfProcessorsOnRemoteHost (Site_1_IP, port, username, password))), RemoteFileMpstatS1)
+    RestartRemoteDaemon(Site_2_IP, port, username, password, 'mpstat', "3 -P " + str (GetCpuListForMpstat(GetNumberOfProcessorsOnRemoteHost (Site_2_IP, port, username, password))), RemoteFileMpstatS2)
+    #Start Nuttcp test
+    MaxSpeed, SpeedWithoutLoss = NetperfUDP_test (PacketLength, RemoteHostIP, LocalHostIP)
+    print
+    print bcolors.HEADER + "Netperf UDP test with Mpstat, PacketLength is " + str(PacketLength) + bcolors.ENDC
+    print MaxSpeed, "Throughput max 10^6bits/sec"
+    print SpeedWithoutLoss, "Throughput without loss 10^6bits/sec"
+    #Stop Mmstat
+    StopRemoteDaemon(Site_1_IP, port, username, password, 'mpstat')
+    StopRemoteDaemon(Site_2_IP, port, username, password, 'mpstat')
+    #Get Mpstat files
+    GetFilesFromRemoteHost(Site_1_IP, port, username, password, LocalFileMpstatS1, RemoteFileMpstatS1)
+    GetFilesFromRemoteHost(Site_2_IP, port, username, password, LocalFileMpstatS2, RemoteFileMpstatS2)
+    #Parse CPU load
+    cpu_load_on_site1 = ParsingMpstatOutput(LocalFileMpstatS1, mpstat_header_regexp)
+    cpu_load_on_site2 = ParsingMpstatOutput(LocalFileMpstatS2, mpstat_header_regexp)
+    print cpu_load_on_site1, "CPU load on Site_1 IP is ", Site_1_IP
+    print cpu_load_on_site2, "CPU load on Site_2 IP is ", Site_2_IP
+    print
+    time.sleep(1)
+    return
+
 # get IP addresses
 print "The test is running now, please wait ..."
 print
 ip_list = ParseScriptArguments(sys.argv[1:])
 PingTestForIPlist(ip_list)
-avg_speed_UDP1400, avg_loss_UDP1400 = GeneralNetperfUDPTestWithVmstat (1400, RemTrafGenMachineIP, 10)
-avg_speed_UDP1000, avg_loss_UDP1000 = GeneralNetperfUDPTestWithVmstat (1000, RemTrafGenMachineIP, 10)
-avg_speed_UDP512, avg_loss_UDP512 = GeneralNetperfUDPTestWithVmstat (512, RemTrafGenMachineIP, 10)
-avg_speed_UDP64, avg_loss_UDP64 = GeneralNetperfUDPTestWithVmstat (64, RemTrafGenMachineIP, 10)
-print bcolors.HEADER + "Average result" + bcolors.ENDC
+avg_speed_UDP1400, avg_loss_UDP1400 = GeneralNuttcpfUDPTestWithMpstat (1400, RemTrafGenMachineIP, 10)
+avg_speed_UDP1000, avg_loss_UDP1000 = GeneralNuttcpfUDPTestWithMpstat (1000, RemTrafGenMachineIP, 10)
+avg_speed_UDP512, avg_loss_UDP512 = GeneralNuttcpfUDPTestWithMpstat (512, RemTrafGenMachineIP, 10)
+avg_speed_UDP64, avg_loss_UDP64 = GeneralNuttcpfUDPTestWithMpstat (64, RemTrafGenMachineIP, 10)
+print bcolors.HEADER + "Average result for Nuttcp tests" + bcolors.ENDC
 print
 print bcolors.OKBLUE + "UDP1400 speed is" + str(avg_speed_UDP1400) + " loss is " + str(avg_loss_UDP1400) + bcolors.ENDC
 print bcolors.OKBLUE + "UDP1000 speed is" + str(avg_speed_UDP1000) + " loss is " + str(avg_loss_UDP1000) + bcolors.ENDC
 print bcolors.OKBLUE + "UDP512 speed is" + str(avg_speed_UDP512) + " loss is " + str(avg_loss_UDP512) + bcolors.ENDC
 print bcolors.OKBLUE + "UDP64 speed is" + str(avg_speed_UDP64) + " loss is " + str(avg_loss_UDP64) + bcolors.ENDC
+print
+avg_speed_UDP1400, avg_loss_UDP1400 = GeneralNuttcpUDPTestWithVmstat (1400, RemTrafGenMachineIP, 10)
+avg_speed_UDP1000, avg_loss_UDP1000 = GeneralNuttcpUDPTestWithVmstat (1000, RemTrafGenMachineIP, 10)
+avg_speed_UDP512, avg_loss_UDP512 = GeneralNuttcpUDPTestWithVmstat (512, RemTrafGenMachineIP, 10)
+avg_speed_UDP64, avg_loss_UDP64 = GeneralNuttcpUDPTestWithVmstat (64, RemTrafGenMachineIP, 10)
+print bcolors.HEADER + "Average result for Nuttcp tests" + bcolors.ENDC
+print
+print bcolors.OKBLUE + "UDP1400 speed is" + str(avg_speed_UDP1400) + " loss is " + str(avg_loss_UDP1400) + bcolors.ENDC
+print bcolors.OKBLUE + "UDP1000 speed is" + str(avg_speed_UDP1000) + " loss is " + str(avg_loss_UDP1000) + bcolors.ENDC
+print bcolors.OKBLUE + "UDP512 speed is" + str(avg_speed_UDP512) + " loss is " + str(avg_loss_UDP512) + bcolors.ENDC
+print bcolors.OKBLUE + "UDP64 speed is" + str(avg_speed_UDP64) + " loss is " + str(avg_loss_UDP64) + bcolors.ENDC
+GeneralNetperfUDPTestWithMpstat (1400, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfUDPTestWithMpstat (1000, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfUDPTestWithMpstat (512, RemTrafGenMachineIP, LocTrafGenMachineIP)
+GeneralNetperfUDPTestWithMpstat (64, RemTrafGenMachineIP, LocTrafGenMachineIP)
