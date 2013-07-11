@@ -375,7 +375,9 @@ def NuttcpUDP_test (Mbps, PacketLength, RemoteHostIP, NumberOfIterations):
         speed_without_loss = nuttcpOtputs[-1].split()[6]
         loss_of_current_test = nuttcpOtputs[-1].split()[-2]
 
-        if (float(speed_without_loss) > float(max_speed_without_loss) ) and (float(loss_of_current_test) < 1):
+##       if (float(speed_without_loss) > float(max_speed_without_loss) ) and (float(loss_of_current_test) < 1):
+##            max_speed_without_loss = speed_without_loss
+        if (float(speed_without_loss) > float(max_speed_without_loss) ):
             max_speed_without_loss = speed_without_loss
 
 ##        print "Number of test is ", i
@@ -570,28 +572,34 @@ print "The test is running now, please wait ..."
 print
 ip_list = ParseScriptArguments(sys.argv[1:])
 PingTestForIPlist(ip_list)
-avg_speed_UDP1400, avg_loss_UDP1400 = GeneralNuttcpfUDPTestWithMpstat (1400, RemTrafGenMachineIP, 10)
-avg_speed_UDP1000, avg_loss_UDP1000 = GeneralNuttcpfUDPTestWithMpstat (1000, RemTrafGenMachineIP, 10)
-avg_speed_UDP512, avg_loss_UDP512 = GeneralNuttcpfUDPTestWithMpstat (512, RemTrafGenMachineIP, 10)
-avg_speed_UDP64, avg_loss_UDP64 = GeneralNuttcpfUDPTestWithMpstat (64, RemTrafGenMachineIP, 10)
-print bcolors.HEADER + "Average result for Nuttcp tests" + bcolors.ENDC
-print
-print bcolors.OKBLUE + "UDP1400 speed is" + str(avg_speed_UDP1400) + " loss is " + str(avg_loss_UDP1400) + bcolors.ENDC
-print bcolors.OKBLUE + "UDP1000 speed is" + str(avg_speed_UDP1000) + " loss is " + str(avg_loss_UDP1000) + bcolors.ENDC
-print bcolors.OKBLUE + "UDP512 speed is" + str(avg_speed_UDP512) + " loss is " + str(avg_loss_UDP512) + bcolors.ENDC
-print bcolors.OKBLUE + "UDP64 speed is" + str(avg_speed_UDP64) + " loss is " + str(avg_loss_UDP64) + bcolors.ENDC
-print
-avg_speed_UDP1400, avg_loss_UDP1400 = GeneralNuttcpUDPTestWithVmstat (1400, RemTrafGenMachineIP, 10)
-avg_speed_UDP1000, avg_loss_UDP1000 = GeneralNuttcpUDPTestWithVmstat (1000, RemTrafGenMachineIP, 10)
-avg_speed_UDP512, avg_loss_UDP512 = GeneralNuttcpUDPTestWithVmstat (512, RemTrafGenMachineIP, 10)
-avg_speed_UDP64, avg_loss_UDP64 = GeneralNuttcpUDPTestWithVmstat (64, RemTrafGenMachineIP, 10)
-print bcolors.HEADER + "Average result for Nuttcp tests" + bcolors.ENDC
-print
-print bcolors.OKBLUE + "UDP1400 speed is" + str(avg_speed_UDP1400) + " loss is " + str(avg_loss_UDP1400) + bcolors.ENDC
-print bcolors.OKBLUE + "UDP1000 speed is" + str(avg_speed_UDP1000) + " loss is " + str(avg_loss_UDP1000) + bcolors.ENDC
-print bcolors.OKBLUE + "UDP512 speed is" + str(avg_speed_UDP512) + " loss is " + str(avg_loss_UDP512) + bcolors.ENDC
-print bcolors.OKBLUE + "UDP64 speed is" + str(avg_speed_UDP64) + " loss is " + str(avg_loss_UDP64) + bcolors.ENDC
-GeneralNetperfUDPTestWithMpstat (1400, RemTrafGenMachineIP, LocTrafGenMachineIP)
-GeneralNetperfUDPTestWithMpstat (1000, RemTrafGenMachineIP, LocTrafGenMachineIP)
-GeneralNetperfUDPTestWithMpstat (512, RemTrafGenMachineIP, LocTrafGenMachineIP)
-GeneralNetperfUDPTestWithMpstat (64, RemTrafGenMachineIP, LocTrafGenMachineIP)
+#Nuttcp test with Mpstat
+for attempts in range(1):
+    avg_speed_UDP1400, avg_loss_UDP1400 = GeneralNuttcpfUDPTestWithMpstat (1400, RemTrafGenMachineIP, 10)
+    avg_speed_UDP1000, avg_loss_UDP1000 = GeneralNuttcpfUDPTestWithMpstat (1000, RemTrafGenMachineIP, 10)
+    avg_speed_UDP512, avg_loss_UDP512 = GeneralNuttcpfUDPTestWithMpstat (512, RemTrafGenMachineIP, 10)
+    avg_speed_UDP64, avg_loss_UDP64 = GeneralNuttcpfUDPTestWithMpstat (64, RemTrafGenMachineIP, 10)
+    print bcolors.HEADER + "Average result for Nuttcp tests" + bcolors.ENDC
+    print
+    print bcolors.OKBLUE + "UDP1400 speed is" + str(avg_speed_UDP1400) + " loss is " + str(avg_loss_UDP1400) + bcolors.ENDC
+    print bcolors.OKBLUE + "UDP1000 speed is" + str(avg_speed_UDP1000) + " loss is " + str(avg_loss_UDP1000) + bcolors.ENDC
+    print bcolors.OKBLUE + "UDP512 speed is" + str(avg_speed_UDP512) + " loss is " + str(avg_loss_UDP512) + bcolors.ENDC
+    print bcolors.OKBLUE + "UDP64 speed is" + str(avg_speed_UDP64) + " loss is " + str(avg_loss_UDP64) + bcolors.ENDC
+    print
+#Nuttcp test with Vmstat
+for attempts in range(0):
+    avg_speed_UDP1400, avg_loss_UDP1400 = GeneralNuttcpUDPTestWithVmstat (1400, RemTrafGenMachineIP, 10)
+    avg_speed_UDP1000, avg_loss_UDP1000 = GeneralNuttcpUDPTestWithVmstat (1000, RemTrafGenMachineIP, 10)
+    avg_speed_UDP512, avg_loss_UDP512 = GeneralNuttcpUDPTestWithVmstat (512, RemTrafGenMachineIP, 10)
+    avg_speed_UDP64, avg_loss_UDP64 = GeneralNuttcpUDPTestWithVmstat (64, RemTrafGenMachineIP, 10)
+    print bcolors.HEADER + "Average result for Nuttcp tests" + bcolors.ENDC
+    print
+    print bcolors.OKBLUE + "UDP1400 speed is" + str(avg_speed_UDP1400) + " loss is " + str(avg_loss_UDP1400) + bcolors.ENDC
+    print bcolors.OKBLUE + "UDP1000 speed is" + str(avg_speed_UDP1000) + " loss is " + str(avg_loss_UDP1000) + bcolors.ENDC
+    print bcolors.OKBLUE + "UDP512 speed is" + str(avg_speed_UDP512) + " loss is " + str(avg_loss_UDP512) + bcolors.ENDC
+    print bcolors.OKBLUE + "UDP64 speed is" + str(avg_speed_UDP64) + " loss is " + str(avg_loss_UDP64) + bcolors.ENDC
+#Netperf test with Mpstat
+for attempts in range(1):
+    GeneralNetperfUDPTestWithMpstat (1400, RemTrafGenMachineIP, LocTrafGenMachineIP)
+    GeneralNetperfUDPTestWithMpstat (1000, RemTrafGenMachineIP, LocTrafGenMachineIP)
+    GeneralNetperfUDPTestWithMpstat (512, RemTrafGenMachineIP, LocTrafGenMachineIP)
+    GeneralNetperfUDPTestWithMpstat (64, RemTrafGenMachineIP, LocTrafGenMachineIP)
