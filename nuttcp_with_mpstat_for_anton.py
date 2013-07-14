@@ -38,35 +38,6 @@ UDP64 = 64
 
 mpstat_header_regexp = re.compile('[\d]{2}:[\d]{2}:[\d]{2}[\s]{0,}CPU[\s]{0,}%usr[\s]{1,}%nice[\s]{1,}%sys[\s]{1,}%iowait[\s]{1,}%irq[\s]{1,}%soft[\s]{1,}%steal[\s]{1,}%guest[\s]{1,}%idle|^[\s]{1,}|Linux.{0,}[\(][\s]{0,}[\d]{1,}[\s]{1,}CPU[\s]{0,}[\)][\s]{0,}')
 
-def ChangeLSPRemoteOnSterraGate (RemoteHostIP, Port, Username, Password, RemoteLSP):
-        try:
-            paramiko.util.log_to_file('paramiko.log')
-            s = paramiko.SSHClient()
-            s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            s.connect(RemoteHostIP, Port, Username, Password)
-        except:
-            sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
-        else:
-            check_lsp = 'lsp_mgr check -f ' + str(RemoteLSP)
-            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Check LSP command: " + str(check_lsp)
-            stdin, stdout, stderr = s.exec_command(check_lsp)
-            status = stdout.channel.recv_exit_status()
-            if status != 0:
-                sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Can't check LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP))
-            else:
-                if status == 0:
-                    print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Check LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP) + " was successful"
-                    load_lsp = 'lsp_mgr load -f ' + str(RemoteLSP)
-                    stdin, stdout, stderr = s.exec_command(load_lsp)
-                    status = stdout.channel.recv_exit_status()
-                    if status !=0:
-                        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Can't load LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP))
-                    else:
-                        if status == 0:
-                            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Load LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP) + " was successful"
-
-        return 0
-
 def CheckStartrRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName):
     # if return status is 0 - remote daemon is now running
     # if return status is 1 - remote daemon is not running
@@ -239,21 +210,21 @@ class bcolors:
         self.ENDC = ''
 
 def ParseScriptArguments(argv):
-    LocalIP = ''
-    RemoteIP = ''
     global Site_1_IP
     global Site_2_IP
     global encryption_algorithm
     global traffc_generator
+    global number_of_test
     encryption_algorithm = ''
     traffc_generator = ''
+    number_of_test = 1
     Site_1_IP = ''
     Site_2_IP = ''
     IPlist = []
     global LocTrafGenMachineIP
     global RemTrafGenMachineIP
     try:
-        opts, args = getopt.getopt(argv,'hL:R:l:r:', ['help', 'ip_local=', 'ip_remote=', 'ip_site1=', 'ip_site2=', 'encr_alg=', 'traf_gen='  ])
+        opts, args = getopt.getopt(argv,'hL:R:l:r:', ['help', 'ip_local=', 'ip_remote=', 'ip_site1=', 'ip_site2=', 'encr_alg=', 'traf_gen=', 'number=1'  ])
     except getopt.GetoptError:
         print
         print bcolors.FAIL + "Error :" + bcolors.ENDC + " check parameters of script, please see the following syntax:"
@@ -261,12 +232,13 @@ def ParseScriptArguments(argv):
         print "Usage: name_of_script.py {options} {parametrs}"
         print "options:"
         print
-        print '         --ip_local  IPv4 address    <Local traffic generator machine IP>'
-        print '         --ip_remote IPv4 address    <Remote traffic receiver machine IP>'
-        print '         --ip_site1  IPv4 address    <First IPsec Site IP> '
-        print '         --ip_site2  IPv4 address    <Second IPsec Site IP>'
-        print '         --encr_alg  {C | CI | IMIT | ALL}   <Encryption algorithm> '
+        print '         --ip_local  IPv4 address                <Local traffic generator machine IP>'
+        print '         --ip_remote IPv4 address                <Remote traffic receiver machine IP>'
+        print '         --ip_site1  IPv4 address                <First IPsec Site IP> '
+        print '         --ip_site2  IPv4 address                <Second IPsec Site IP>'
+        print '         --encr_alg  {C | CI | IMIT | ALL}       <Encryption algorithm> '
         print '         --traf_gen  {nuttcp | netperf | ALL}    <Traffic generator>'
+        print '         --number    [int number]                <Number of tests, default is 1>'
         print
         sys.exit()
     if len(opts) == 0:
@@ -276,12 +248,13 @@ def ParseScriptArguments(argv):
         print "Usage: name_of_script.py {options} {parametrs}"
         print "options:"
         print
-        print '         --ip_local  IPv4 address    <Local traffic generator machine IP>'
-        print '         --ip_remote IPv4 address    <Remote traffic receiver machine IP>'
-        print '         --ip_site1  IPv4 address    <First IPsec Site IP> '
-        print '         --ip_site2  IPv4 address    <Second IPsec Site IP>'
-        print '         --encr_alg  {C | CI | IMIT | ALL}   <Encryption algorithm> '
+        print '         --ip_local  IPv4 address                <Local traffic generator machine IP>'
+        print '         --ip_remote IPv4 address                <Remote traffic receiver machine IP>'
+        print '         --ip_site1  IPv4 address                <First IPsec Site IP> '
+        print '         --ip_site2  IPv4 address                <Second IPsec Site IP>'
+        print '         --encr_alg  {C | CI | IMIT | ALL}       <Encryption algorithm> '
         print '         --traf_gen  {nuttcp | netperf | ALL}    <Traffic generator>'
+        print '         --number    [int number]                <Number of tests, default is 1>'
         print
         sys.exit()
     for opt, arg in opts:
@@ -290,12 +263,13 @@ def ParseScriptArguments(argv):
             print "Usage: name_of_script.py {options} {parametrs}"
             print "options:"
             print
-            print '         --ip_local  IPv4 address    <Local traffic generator machine IP>'
-            print '         --ip_remote IPv4 address    <Remote traffic receiver machine IP>'
-            print '         --ip_site1  IPv4 address    <First IPsec Site IP> '
-            print '         --ip_site2  IPv4 address    <Second IPsec Site IP>'
-            print '         --encr_alg  {C | CI | IMIT | ALL}   <Encryption algorithm> '
+            print '         --ip_local  IPv4 address                <Local traffic generator machine IP>'
+            print '         --ip_remote IPv4 address                <Remote traffic receiver machine IP>'
+            print '         --ip_site1  IPv4 address                <First IPsec Site IP> '
+            print '         --ip_site2  IPv4 address                <Second IPsec Site IP>'
+            print '         --encr_alg  {C | CI | IMIT | ALL}       <Encryption algorithm> '
             print '         --traf_gen  {nuttcp | netperf | ALL}    <Traffic generator>'
+            print '         --number    [int number]                <Number of tests, default is 1>'
             print
             sys.exit()
         elif opt in ('--ip_local'):
@@ -314,6 +288,8 @@ def ParseScriptArguments(argv):
             encryption_algorithm = arg
         elif opt in ('--traf_gen'):
             traffc_generator = arg
+        elif opt in ('--number'):
+            number_of_test = int(arg)
     if (LocTrafGenMachineIP == '') or (RemTrafGenMachineIP == '') or (Site_1_IP == '') or (Site_2_IP == '') or (encryption_algorithm == '') or (traffc_generator == ''):
         print
         print bcolors.FAIL + "Error :" + bcolors.ENDC + " check parameters of script, please see the following syntax:"
@@ -321,20 +297,21 @@ def ParseScriptArguments(argv):
         print "Usage: name_of_script.py {options} {parametrs}"
         print "options:"
         print
-        print '         --ip_local  IPv4 address    <Local traffic generator machine IP>'
-        print '         --ip_remote IPv4 address    <Remote traffic receiver machine IP>'
-        print '         --ip_site1  IPv4 address    <First IPsec Site IP> '
-        print '         --ip_site2  IPv4 address    <Second IPsec Site IP>'
-        print '         --encr_alg  {C | CI | IMIT | ALL}   <Encryption algorithm> '
+        print '         --ip_local  IPv4 address                <Local traffic generator machine IP>'
+        print '         --ip_remote IPv4 address                <Remote traffic receiver machine IP>'
+        print '         --ip_site1  IPv4 address                <First IPsec Site IP> '
+        print '         --ip_site2  IPv4 address                <Second IPsec Site IP>'
+        print '         --encr_alg  {C | CI | IMIT | ALL}       <Encryption algorithm> '
         print '         --traf_gen  {nuttcp | netperf | ALL}    <Traffic generator>'
+        print '         --number    [int number]                <Number of tests, default is 1>'
         print
         sys.exit()
-    print 'Local IP is: ', LocTrafGenMachineIP
-    print 'Remote IP is: ', RemTrafGenMachineIP
-    print 'Site_1 IP is: ', Site_1_IP
-    print 'Site_2 IP is: ', Site_2_IP
-    print 'Encryption algorithm is:', encryption_algorithm
-    print 'Traffic generator is:', traffc_generator
+    print 'Local IP is:             ', LocTrafGenMachineIP
+    print 'Remote IP is:            ', RemTrafGenMachineIP
+    print 'Site_1 IP is:            ', Site_1_IP
+    print 'Site_2 IP is:            ', Site_2_IP
+    print 'Encryption algorithm is: ', encryption_algorithm
+    print 'Traffic generator is:    ', traffc_generator
     print
     return IPlist
 
@@ -346,6 +323,36 @@ def PutLSPToRemoteHost (FirsSiteIP, SecondSiteIP, Port, Username, Password):
     # Put to Second site
     PutLocalFileToRemoteHost (SecondSiteIP, Port, Username, Password, second_site_lsp_C_CI_IMIT, second_site_lsp_C_CI_IMIT)
     return 0
+
+def ChangeLSPRemoteOnSterraGate (RemoteHostIP, Port, Username, Password, RemoteLSP):
+        try:
+            paramiko.util.log_to_file('paramiko.log')
+            s = paramiko.SSHClient()
+            s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            s.connect(RemoteHostIP, Port, Username, Password, timeout = 3.0)
+        except:
+            sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+        else:
+            check_lsp = 'lsp_mgr check -f ' + str(RemoteLSP)
+            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Check LSP command: " + str(check_lsp)
+            stdin, stdout, stderr = s.exec_command(check_lsp)
+            status = stdout.channel.recv_exit_status()
+            if status != 0:
+                sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Can't check LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP))
+            else:
+                if status == 0:
+                    print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Check LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP) + " was successful"
+                    load_lsp = 'lsp_mgr load -f ' + str(RemoteLSP)
+                    stdin, stdout, stderr = s.exec_command(load_lsp)
+                    status = stdout.channel.recv_exit_status()
+                    if status !=0:
+                        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Can't load LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP))
+                    else:
+                        if status == 0:
+                            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Load LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP) + " was successful"
+        finally:
+            s.close()
+        return 0
 
 def PutLocalFileToRemoteHost (RemoteHostIP, Port, Username, Password, LocalFile, RemoteFile):
     if os.path.isfile(LocalFile): # check to exitst of local file
@@ -828,75 +835,75 @@ def ChoseTest (Attempts):
         FullNetperfTestWithMpstat_IMIT (Attempts)
     if (encryption_algorithm == 'ALL') and (traffc_generator == 'netperf'):
         FullNetperfTestWithMpstat_ALL (Attempts)
-    if (encryption_algorithm == 'C') and (traffc_generator == 'nuutcp'):
+    if (encryption_algorithm == 'C') and (traffc_generator == 'nuttcp'):
         FullNuttcpfTestWithMpstat_C (Attempts)
-    if (encryption_algorithm == 'CI') and (traffc_generator == 'nuutcp'):
+    if (encryption_algorithm == 'CI') and (traffc_generator == 'nuttcp'):
         FullNuttcpfTestWithMpstat_CI (Attempts)
-    if (encryption_algorithm == 'IMIT') and (traffc_generator == 'nuutcp'):
+    if (encryption_algorithm == 'IMIT') and (traffc_generator == 'nuttcp'):
         FullNuttcpfTestWithMpstat_IMIT (Attempts)
-    if (encryption_algorithm == 'ALL') and (traffc_generator == 'nuutcp'):
+    if (encryption_algorithm == 'ALL') and (traffc_generator == 'nuttcp'):
         FullNuttcpfTestWithMpstat_ALL (Attempts)
     if (encryption_algorithm == 'ALL') and (traffc_generator == 'ALL'):
         FullNuttcpfAndNuttcpTestWithMpstat_ALL (Attempts)
 
 def FullNetperfTestWithMpstat_C (Attempts):
-        print bcolors.HEADER + "Start test CHIPER with Netpef (Mpstat)" + bcolors.ENDC
+        print bcolors.HEADER + "**********Start test CIPHER with Netperf (Mpstat)**********" + bcolors.ENDC
         #ChangeLSPRemoteOnSterraGate (Site_2_IP, port, username, password, second_site_lsp_C_CI_IMIT)
         ChangeLSPRemoteOnSterraGate (Site_1_IP, port, username, password, first_site_lsp_C)
         FullNetperfTestWithMpstat(Attempts)
         print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
 def FullNetperfTestWithMpstat_CI (Attempts):
-        print bcolors.HEADER + "Start test CHIPER and INTEGRITY with Netpef (Mpstat)" + bcolors.ENDC
+        print bcolors.HEADER + "**********Start test CIPHER and INTEGRITY with Netperf (Mpstat)**********" + bcolors.ENDC
         #ChangeLSPRemoteOnSterraGate (Site_2_IP, port, username, password, second_site_lsp_C_CI_IMIT)
         ChangeLSPRemoteOnSterraGate (Site_1_IP, port, username, password, first_site_lsp_CI)
         FullNetperfTestWithMpstat(Attempts)
         print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
 def FullNetperfTestWithMpstat_IMIT (Attempts):
-        print bcolors.HEADER + "Start test IMIT with Netpef (Mpstat)" + bcolors.ENDC
+        print bcolors.HEADER + "**********Start test IMIT with Netperf (Mpstat)**********" + bcolors.ENDC
         #ChangeLSPRemoteOnSterraGate (Site_2_IP, port, username, password, second_site_lsp_C_CI_IMIT)
         ChangeLSPRemoteOnSterraGate (Site_1_IP, port, username, password, first_site_lsp_IMIT)
         FullNetperfTestWithMpstat(Attempts)
         print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
 def FullNetperfTestWithMpstat_ALL (Attempts):
-        print bcolors.HEADER + "Start test ALL with Netpef (Mpstat)" + bcolors.ENDC
+        print bcolors.HEADER + "**********Start test ALL with Netperf (Mpstat)**********" + bcolors.ENDC
         FullNetperfTestWithMpstat_C (Attempts)
         FullNetperfTestWithMpstat_CI (Attempts)
         FullNetperfTestWithMpstat_IMIT (Attempts)
         print bcolors.HEADER + "****************************************************************" + bcolors.END
 
 def FullNuttcpfTestWithMpstat_C (Attempts):
-        print bcolors.HEADER + "Start test CHIPER with Nuttcp (Mpstat)" + bcolors.ENDC
+        print bcolors.HEADER + "**********Start test CIPHER with Nuttcp (Mpstat)**********" + bcolors.ENDC
         #ChangeLSPRemoteOnSterraGate (Site_2_IP, port, username, password, second_site_lsp_C_CI_IMIT)
         ChangeLSPRemoteOnSterraGate (Site_1_IP, port, username, password, first_site_lsp_C)
         FullNuttcpTestWithMpstat(Attempts)
         print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
 def FullNuttcpfTestWithMpstat_CI (Attempts):
-        print bcolors.HEADER + "Start test CHIPER and INTEGRITY with Nuttcp (Mpstat)" + bcolors.ENDC
+        print bcolors.HEADER + "**********Start test CIPHER and INTEGRITY with Nuttcp (Mpstat)**********" + bcolors.ENDC
         #ChangeLSPRemoteOnSterraGate (Site_2_IP, port, username, password, second_site_lsp_C_CI_IMIT)
         ChangeLSPRemoteOnSterraGate (Site_1_IP, port, username, password, first_site_lsp_CI)
         FullNuttcpTestWithMpstat(Attempts)
         print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
 def FullNuttcpfTestWithMpstat_IMIT (Attempts):
-        print bcolors.HEADER + "Start test IMIT with Nuttcp (Mpstat)" + bcolors.ENDC
+        print bcolors.HEADER + "**********Start test IMIT with Nuttcp (Mpstat)**********" + bcolors.ENDC
         #ChangeLSPRemoteOnSterraGate (Site_2_IP, port, username, password, second_site_lsp_C_CI_IMIT)
         ChangeLSPRemoteOnSterraGate (Site_1_IP, port, username, password, first_site_lsp_IMIT)
         FullNuttcpTestWithMpstat(Attempts)
         print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
 def FullNuttcpfTestWithMpstat_ALL (Attempts):
-        print bcolors.HEADER + "Start test ALL with Nuttcp (Mpstat)" + bcolors.ENDC
+        print bcolors.HEADER + "**********Start test ALL with Nuttcp (Mpstat)**********" + bcolors.ENDC
         FullNuttcpfTestWithMpstat_C (Attempts)
         FullNuttcpfTestWithMpstat_CI (Attempts)
         FullNuttcpfTestWithMpstat_IMIT (Attempts)
         print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
 def FullNuttcpfAndNuttcpTestWithMpstat_ALL (Attempts):
-        print bcolors.HEADER + "Start test ALL with Nuttcp and Netperf (Mpstat)" + bcolors.ENDC
+        print bcolors.HEADER + "**********Start test ALL with Nuttcp and Netperf (Mpstat)**********" + bcolors.ENDC
         FullNuttcpfTestWithMpstat_ALL (Attempts)
         FullNetperfTestWithMpstat_ALL (Attempts)
 
@@ -939,12 +946,12 @@ def FullNetperfTestWithMpstat (Attempts):
         GeneralNetperfUDPTestWithMpstat (64, RemTrafGenMachineIP, LocTrafGenMachineIP)
         GeneralNetperfTCPTestWithMpstat (RemTrafGenMachineIP, LocTrafGenMachineIP)
 
-# get IP addresses
+# get parameters and IP address
 ip_list = ParseScriptArguments(sys.argv[1:])
 print "The test is running now, please wait ..."
 print
 PingTestForIPlist(ip_list)
 PutLSPToRemoteHost (Site_1_IP, Site_2_IP, port, username, password)
 ChangeLSPRemoteOnSterraGate (Site_2_IP, port, username, password, second_site_lsp_C_CI_IMIT)
-ChoseTest (1)
+ChoseTest (number_of_test)
 
