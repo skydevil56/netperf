@@ -844,7 +844,13 @@ def ChoseTest (Attempts):
     if (encryption_algorithm == 'ALL') and (traffc_generator == 'nuttcp'):
         FullNuttcpfTestWithMpstat_ALL (Attempts)
     if (encryption_algorithm == 'ALL') and (traffc_generator == 'ALL'):
-        FullNuttcpfAndNuttcpTestWithMpstat_ALL (Attempts)
+        FullNuttcpfAndNetperfTestWithMpstat_ALL (Attempts)
+    if (encryption_algorithm == 'C') and (traffc_generator == 'ALL'):
+        FullNuttcpfAndNetperfTestWithMpstat_C (Attempts)
+    if (encryption_algorithm == 'CI') and (traffc_generator == 'ALL'):
+        FullNuttcpfAndNetperfTestWithMpstat_CI (Attempts)
+    if (encryption_algorithm == 'IMIT') and (traffc_generator == 'ALL'):
+        FullNuttcpfAndNetperfTestWithMpstat_IMIT (Attempts)
 
 def FullNetperfTestWithMpstat_C (Attempts):
         print bcolors.HEADER + "**********Start test CIPHER with Netperf (Mpstat)**********" + bcolors.ENDC
@@ -872,7 +878,7 @@ def FullNetperfTestWithMpstat_ALL (Attempts):
         FullNetperfTestWithMpstat_C (Attempts)
         FullNetperfTestWithMpstat_CI (Attempts)
         FullNetperfTestWithMpstat_IMIT (Attempts)
-        print bcolors.HEADER + "****************************************************************" + bcolors.END
+        print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
 def FullNuttcpfTestWithMpstat_C (Attempts):
         print bcolors.HEADER + "**********Start test CIPHER with Nuttcp (Mpstat)**********" + bcolors.ENDC
@@ -902,10 +908,25 @@ def FullNuttcpfTestWithMpstat_ALL (Attempts):
         FullNuttcpfTestWithMpstat_IMIT (Attempts)
         print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
-def FullNuttcpfAndNuttcpTestWithMpstat_ALL (Attempts):
+def FullNuttcpfAndNetperfTestWithMpstat_ALL (Attempts):
         print bcolors.HEADER + "**********Start test ALL with Nuttcp and Netperf (Mpstat)**********" + bcolors.ENDC
         FullNuttcpfTestWithMpstat_ALL (Attempts)
         FullNetperfTestWithMpstat_ALL (Attempts)
+
+def FullNuttcpfAndNetperfTestWithMpstat_C (Attempts):
+        print bcolors.HEADER + "**********Start test CIPHER with Nuttcp and Netperf (Mpstat)**********" + bcolors.ENDC
+        FullNetperfTestWithMpstat_C (Attempts)
+        FullNuttcpfTestWithMpstat_C (Attempts)
+
+def FullNuttcpfAndNetperfTestWithMpstat_CI (Attempts):
+        print bcolors.HEADER + "**********Start test CIPHER and INTEGRITY with Nuttcp and Netperf (Mpstat)**********" + bcolors.ENDC
+        FullNetperfTestWithMpstat_CI (Attempts)
+        FullNuttcpfTestWithMpstat_CI (Attempts)
+
+def FullNuttcpfAndNetperfTestWithMpstat_IMIT (Attempts):
+        print bcolors.HEADER + "**********Start test IMIT with Nuttcp and Netperf (Mpstat)**********" + bcolors.ENDC
+        FullNetperfTestWithMpstat_IMIT (Attempts)
+        FullNuttcpfTestWithMpstat_IMIT (Attempts)
 
 #Nuttcp test with Mpstat
 def FullNuttcpTestWithMpstat (Attempts):
@@ -954,4 +975,3 @@ PingTestForIPlist(ip_list)
 PutLSPToRemoteHost (Site_1_IP, Site_2_IP, port, username, password)
 ChangeLSPRemoteOnSterraGate (Site_2_IP, port, username, password, second_site_lsp_C_CI_IMIT)
 ChoseTest (number_of_test)
-
