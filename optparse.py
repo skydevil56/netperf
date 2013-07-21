@@ -142,6 +142,11 @@ parser.add_option('--verbose', help='More information during the test. A default
 def CheckStartrRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName):
     # if return status is 0 - remote daemon is now running
     # if return status is 1 - remote daemon is not running
+
+    if DaemonName == 'vpngate': # special for SterrGate =)
+        DaemonName = 'vpnsvc'
+    if DaemonName == 'vpndrv':
+        DaemonName = 'vpndrvr'
     check_daemon_is_starting = "ps -A | grep " + str(DaemonName)
     paramiko.util.log_to_file('paramiko.log')
     s = paramiko.SSHClient()
@@ -155,10 +160,107 @@ def CheckStartrRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName)
         status = stdout.channel.recv_exit_status()
         if (status != 0) and (status != 1):
             s.close()
-            sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + "Can't check start remote daemon: " + str(DaemonName) + " On host: " + \
-            str (RemoteHostIP) + " . Was obtained unknown status: " + str(status))
+            sys.exit(bcolors.FAIL + "[Error in CheckStartrRemoteDaemon]:" + bcolors.ENDC + "Can't check start remote daemon: " + str(DaemonName) + " on host: " + \
+            str (RemoteHostIP) + " .Was obtained unknown status: " + str(status))
+        else:
+            if SpeedTestParams.verbose:
+                if status == 0:
+                    print bcolors.OKGREEN + "[Info in CheckStartrRemoteDaemon]: " + bcolors.ENDC + " Daemon:" + str(DaemonName) + " is running now" + " on remote host: " + str (RemoteHostIP)
+                else:
+                    print bcolors.OKGREEN + "[Info in CheckStartrRemoteDaemon]: " + bcolors.ENDC + " Daemon:" + str(DaemonName) + " not running now" + " on remote host: " + str (RemoteHostIP)
     s.close()
     return status
+
+def StopRemoteDaemonThroughInitd (RemoteHostIP, Port, Username, Password, DaemonName):
+    # if return status is 0 - remote daemon is stop
+    # if return status is 1 - remote daemon already not running
+
+    # check what remote daemon is start
+    if CheckStartrRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName) == 0:
+        stop_remote_daemon = "/etc/init.d/" + str(DaemonName) + " stop"
+        # print bcolors.OKGREEN + "Info: " + bcolors.ENDC +
+        paramiko.util.log_to_file('paramiko.log')
+        s = paramiko.SSHClient()
+        s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            s.connect(RemoteHostIP, Port, Username, Password)
+        except:
+            sys.exit(bcolors.FAIL + "[Error in StopRemoteDaemonThroughInitd]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+        else:
+            stdin, stdout, stderr = s.exec_command(stop_remote_daemon)
+            status = stdout.channel.recv_exit_status()
+            if status != 0:
+                s.close()
+                sys.exit(bcolors.FAIL + "[Error in StopRemoteDaemonThroughInitd]: " + bcolors.ENDC + " Can't stop remote daemon: " + str(DaemonName) + " on remote host: " + str(RemoteHostIP))
+            else:
+                if SpeedTestParams.verbose:
+                    print bcolors.OKGREEN + "[Info in StopRemoteDaemonThroughInitd]: " + bcolors.ENDC + " Daemon:" + str(DaemonName) + " was stopped" + " on remote host: " + str (RemoteHostIP)
+            s.close()
+            return 0
+    else:
+        return 1
+
+def StartRemoteDaemonThroughInitd (RemoteHostIP, Port, Username, Password, DaemonName):
+    # if return status is 0 - remote daemon was start
+    # if return status is 1 - remote daemon already start
+
+    # check what remote daemon already not start
+    if CheckStartrRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName) == 1:
+        start_remote_daemon = "/etc/init.d/" + str(DaemonName) + " start"
+        # print bcolors.OKGREEN + "Info: " + bcolors.ENDC +
+        paramiko.util.log_to_file('paramiko.log')
+        s = paramiko.SSHClient()
+        s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            s.connect(RemoteHostIP, Port, Username, Password)
+        except:
+            sys.exit(bcolors.FAIL + "[Error in StartRemoteDaemonThroughInitd]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+        else:
+            stdin, stdout, stderr = s.exec_command(start_remote_daemon)
+            status = stdout.channel.recv_exit_status()
+            if status != 0:
+                s.close()
+                sys.exit(bcolors.FAIL + "[Error in StartRemoteDaemonThroughInitd]: " + bcolors.ENDC + " Can't start remote daemon: " + str(DaemonName) + " on remote host: " + str(RemoteHostIP))
+            else:
+                if SpeedTestParams.verbose:
+                    print bcolors.OKGREEN + "[Info in StartRemoteDaemonThroughInitd]: " + bcolors.ENDC + " Daemon:" + str(DaemonName) + " was starter" + " on remote host: " + str (RemoteHostIP)
+            s.close()
+            return 0
+    else:
+        return 1
+
+def RestartRemoteSterraGate (RemoteHostIP, Port, Username, Password):
+    restart_remote_sterra = "/etc/init.d/vpngate stop && /etc/init.d/vpndrv stop && /etc/init.d/vpndrv start && /etc/init.d/vpngate start"
+    paramiko.util.log_to_file('paramiko.log')
+    s = paramiko.SSHClient()
+    s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        s.connect(RemoteHostIP, Port, Username, Password)
+    except:
+        sys.exit(bcolors.FAIL + "[Error in RestartRemoteSterraGate]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+    else:
+        stdin, stdout, stderr = s.exec_command(restart_remote_sterra)
+        status = stdout.channel.recv_exit_status()
+        if status != 0:
+            s.close()
+            sys.exit(bcolors.FAIL + "[Error in RestartRemoteSterraGate]: " + bcolors.ENDC + " Can't restart remote S-Terra Gate on host: " + str(RemoteHostIP))
+        else:
+            pass
+            if SpeedTestParams.verbose:
+                print bcolors.OKGREEN + "[Info in RestartRemoteSterraGate]: " + bcolors.ENDC + " S-Terra Gate on host: " + str (RemoteHostIP) + " successful restart"
+        s.close()
+
+##def RestartRemoteSterraGate (RemoteHostIP, Port, Username, Password):
+##    StopRemoteDaemonThroughInitd (RemoteHostIP, Port, Username, Password, 'vpngate')
+##    time.sleep(1)
+##    StopRemoteDaemonThroughInitd (RemoteHostIP, Port, Username, Password, 'vpndrv')
+##    time.sleep(1)
+##    StartRemoteDaemonThroughInitd(RemoteHostIP, Port, Username, Password, 'vpndrv')
+##    time.sleep(1)
+##    StartRemoteDaemonThroughInitd(RemoteHostIP, Port, Username, Password, 'vpngate')
+##    if SpeedTestParams.verbose:
+##        print bcolors.OKGREEN + "[Info in RestartRemoteSterraGate]: " + bcolors.ENDC + " S-Terra Gate: " + str (RemoteHostIP) + " successful restart"
+
 
 def CheckStartrLocalDaemon (DaemonName):
     # if return status is 0 - local daemon is now running
@@ -450,12 +552,12 @@ def PrintSummaryOfTest ():
     print 'Time sync on sites:              ', SpeedTestParams.time_sync_on_sites
     print 'CPU aff. on Site 1:              ', SpeedTestParams.cpu_aff_on_site1
     if SpeedTestParams.cpu_aff_on_site1 == True:
-        print '     Num. CPU for scatter on Site 1: ', SpeedTestParams.number_cpu_for_scatter_on_site1
-        print '     Num. CPU for encrypt on Site 1: ', SpeedTestParams.number_cpu_for_encrypt_on_site1
+        print '     Num. Cores for scatter on Site 1: ', SpeedTestParams.number_cpu_for_scatter_on_site1
+        print '     Num. Cores for encrypt on Site 1: ', SpeedTestParams.number_cpu_for_encrypt_on_site1
     print 'CPU aff. on Site 2:              ', SpeedTestParams.cpu_aff_on_site2
     if SpeedTestParams.cpu_aff_on_site2 == True:
-        print '     Num. CPU for scatter on Site 2: ', SpeedTestParams.number_cpu_for_scatter_on_site2
-        print '     Num. CPU for encrypt on Site 2: ', SpeedTestParams.number_cpu_for_encrypt_on_site2
+        print '     Num. Cores for scatter on Site 2: ', SpeedTestParams.number_cpu_for_scatter_on_site2
+        print '     Num. Cores for encrypt on Site 2: ', SpeedTestParams.number_cpu_for_encrypt_on_site2
     print 'Number of iterations:            ', SpeedTestParams.iterations
     print 'Verbose:                         ', SpeedTestParams.verbose
 
@@ -1065,44 +1167,6 @@ def FullNetperfTestWithMpstat ():
         GeneralNetperfTcpTestWithMpstat (IpAdress.IpRemote, IpAdress.IpLocal)
         GeneralNetperfImixUdpTestWithMpstat(IpAdress.IpRemote, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, NetperfTestParamsClass.TimeForImixTest)
 
-##def SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile, RegExp, NumCoreForScatter, NunCoreForEncrypt, SummCoreOnRemoSterraGate):
-##    # chech correct of CPU affinity
-##    if int(NumCoreForScatter) + int(NunCoreForEncrypt) <= int(SummCoreOnRemoSterraGate):
-##        if SpeedTestParams.verbose:
-##            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " check of CPU affinity was successful on remote host: " + str (RemoteHostIP)
-##    else:
-##        sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + " check of CPU affinity was fail on remote host: " + str (RemoteHostIP)
-##    # get remote vpndrvr.conf file on local host
-##    GetFilesFromRemoteHost(RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile)
-##    # read local vpndrvr.conf file
-##    file = open(LocalVpndrvrFile, 'r')
-##    vpndrvr_conf = file.readlines()
-##    for line in vpndrvr_conf:
-##        if RegExp.match(line):
-##            NumScatterCoresBeforeReplacment = RegExp.match(line).group(1)
-##            NumEncryptCoresBeforeReplacment = RegExp.match(line).group(2)
-##            if SpeedTestParams.verbose:
-##                print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " CPU affinity on remote host: " + str(RemoteHostIP) + " before replacement: options vpndrvr cpu_distribution=\"*:" + \
-##                str(NumScatterCoresBeforeReplacment) + "/" +  str(NumEncryptCoresBeforeReplacment) + "\""
-##    # if current affinity are same with what you want  - do nothing
-##    if (int(NumScatterCoresBeforeReplacment) == int(NumCoreForScatter) ) and (int (NumEncryptCoresBeforeReplacment) == int(NunCoreForEncrypt)):
-##        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " CPU affinity don't change, on host: " + str(RemoteHostIP) + " because current affinity are same with what you want"
-##        file.close()
-##        return 1
-##    else:
-##        file = open(LocalVpndrvrFile, 'r+')
-##        for line in vpndrvr_conf:
-##            if not RegExp.match(line):
-##                file.writelines(line)
-##            else:
-##                file.writelines("options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\"\n")
-##        file.close()
-##        if SpeedTestParams.verbose:
-##            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + "New CPU affinity write on local file: " + str (LocalVpndrvrFile) + \
-##            ", current CPU affinity: options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\""
-##        # copy local vpndrvr.conf file to remote host
-##        PutLocalFileToRemoteHost (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile)
-
 def SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile, RegExp, NumCoreForScatter, NunCoreForEncrypt, SummCoreOnRemoSterraGate):
     CpuDistributionOnRemoteSterraGate = False
     # chech correct of CPU affinity
@@ -1132,12 +1196,16 @@ def SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, User
             if SpeedTestParams.verbose:
                 print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " New CPU affinity write on local file: " + str (LocalVpndrvrFile) + \
                 ", current CPU affinity: options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\""
+            os.remove(LocalVpndrvrFile)
+            RestartRemoteSterraGate (RemoteHostIP, Port, Username, Password)
         else:
             if CpuDistributionOnRemoteSterraGate:
                 # if current affinity are same with what you want  - do nothing
                 if (int(NumScatterCoresBeforeReplacment) == int(NumCoreForScatter) ) and (int (NumEncryptCoresBeforeReplacment) == int(NunCoreForEncrypt)):
                     print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " CPU affinity don't change, on host: " + str(RemoteHostIP) + " because current affinity are same with what you want"
                     file.close()
+                    os.remove(LocalVpndrvrFile)
+                    RestartRemoteSterraGate (RemoteHostIP, Port, Username, Password)
                     return 1
                 else:
                     file = open(LocalVpndrvrFile, 'r+')
@@ -1148,10 +1216,12 @@ def SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, User
                             file.writelines("options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\"\n")
                     file.close()
                     if SpeedTestParams.verbose:
-                        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + "New CPU affinity write on local file: " + str (LocalVpndrvrFile) + \
+                        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " New CPU affinity write on local file: " + str (LocalVpndrvrFile) + \
                         ", current CPU affinity: options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\""
                     # copy local vpndrvr.conf file to remote host
                     PutLocalFileToRemoteHost (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile)
+                    os.remove(LocalVpndrvrFile)
+                    RestartRemoteSterraGate (RemoteHostIP, Port, Username, Password)
     else:
         sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + " Check of CPU affinity was fail on remote host: " + str(RemoteHostIP) + " because Cores for scatter + Cores for encrypt > Number of Cores on host")
 
@@ -1308,4 +1378,3 @@ try:
     ChoseTest ()
 except KeyboardInterrupt:
     sys.exit(bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Test was stopped")
-
