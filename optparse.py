@@ -35,7 +35,13 @@ try:
 except ImportError:
     sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + " python-ipy not install. Python module for handling IPv4 and IPv6 addresses and networks")
 
+vpndrvr_cpu_distribution_regexp = re.compile('options[\s]vpndrvr[\s]cpu_distribution="\*\:([\d]{1,2})/([\d]{1,2})"')
 mpstat_header_regexp = re.compile('[\d]{2}:[\d]{2}:[\d]{2}[\s]{0,}CPU[\s]{0,}%usr[\s]{1,}%nice[\s]{1,}%sys[\s]{1,}%iowait[\s]{1,}%irq[\s]{1,}%soft[\s]{1,}%steal[\s]{1,}%guest[\s]{1,}%idle|^[\s]{1,}|Linux.{0,}[\(][\s]{0,}[\d]{1,}[\s]{1,}CPU[\s]{0,}[\)][\s]{0,}')
+
+class VpndrvrFilesClass:
+    #Vpndrvr files
+    LocalVpndrvrFile = '/root/vpndrvr.conf'
+    RemoteVpndrvrFile = '/etc/modprobe.d/vpndrvr.conf'
 
 class VmstatFilesClass:
     #Vmstat files
@@ -624,6 +630,15 @@ def MD5Checksum(FilePath):
     finally:
         file.close()
 
+def PutLocalLspToRemoteHost (FirsSiteIP, SecondSiteIP, Port, Username, Password):
+    # Put to First site
+    PutLocalFileToRemoteHost (FirsSiteIP, Port, Username, Password, LspFilesClass.first_site_lsp_IMIT, LspFilesClass.first_site_lsp_IMIT)
+    PutLocalFileToRemoteHost (FirsSiteIP, Port, Username, Password, LspFilesClass.first_site_lsp_CI, LspFilesClass.first_site_lsp_CI)
+    PutLocalFileToRemoteHost (FirsSiteIP, Port, Username, Password, LspFilesClass.first_site_lsp_C, LspFilesClass.first_site_lsp_C)
+    # Put to Second site
+    PutLocalFileToRemoteHost (SecondSiteIP, Port, Username, Password, LspFilesClass.second_site_lsp_C_CI_IMIT, LspFilesClass.second_site_lsp_C_CI_IMIT)
+    return 0
+
 def ParsingMpstatOutput (MpstatFile,RegExp):
     cpu_idle =[]
     cpu_load = []
@@ -689,19 +704,23 @@ def GetNumberOfProcessorsOnRemoteHost(RemoteHostIP, Port, Username, Password):
         number_of_processor = stdout.read().split()[0]
         if number_of_processor.isdigit():
             s.close()
+            if SpeedTestParams.verbose:
+                 print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Numbers of CPU: " + str(number_of_processor) + " on remote host: " + str(RemoteHostIP)
             return number_of_processor
         else:
             s.close()
             sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Unknown format number of CPUs on remote host: " + str (RemoteHostIP))
 
 def GetCpuListForMpstat (NumberOfCPU, ScatterCores):
-    cpu_list_without_first_core = []
+    cpu_list_without_scatter_cores = []
     for i in range(int(NumberOfCPU)):
-        # exclude first CPU
+        # exclude CPU for scatter
         if i not in range (ScatterCores):
-            cpu_list_without_first_core.append(str(i))
+            cpu_list_without_scatter_cores.append(str(i))
     # make a list in the form of 1,2,3...
-    cpu_list_for_mpstat = ','.join(cpu_list_without_first_core)
+    cpu_list_for_mpstat = ','.join(cpu_list_without_scatter_cores)
+    if SpeedTestParams.verbose:
+        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " CPU list for Mpstat: " + str(cpu_list_for_mpstat) + ", cores for scatter: " + str (ScatterCores)
     return cpu_list_for_mpstat
 
 def GetFilesFromRemoteHost (RemoteHostIP, Port, Username, Password, LocalFile, RemoteFile):
@@ -720,9 +739,10 @@ def GetFilesFromRemoteHost (RemoteHostIP, Port, Username, Password, LocalFile, R
             s.close()
             sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " File: " + str(RemoteFile) + " does't exist on remote host: " +str(RemoteHostIP))
         else:
-            sftp.get(LocalFile, RemoteFile)
+            sftp.get(RemoteFile, LocalFile)
         finally:
             s.close()
+
 def NetperfTcpTest (RemoteHostIP, LocalHostIP):
     NetperfOtputs = []
     netperf = sp.Popen("netperf -H " + str(RemoteHostIP) + " -L " + str(LocalHostIP) + " -t TCP_STREAM" + " -i 3,2 " + "-l 30", shell=True, executable='/bin/bash', stdout=sp.PIPE)
@@ -918,7 +938,6 @@ def GeneralNetperfTcpTestWithMpstat (RemoteHostIP, LocalHostIP):
     print '{0:.0f}% CPU load on second Site, IP: {1} '.format(cpu_load_on_site2, IpAdress.IpSite2)
     print
     time.sleep(1)
-    return
 
 def GeneralNuttcpfUdpTestWithMpstat (PacketLength, RemoteHostIP, NumberOfIterations):
     list_of_results_speed = []
@@ -1019,7 +1038,6 @@ def GeneralNetperfUdpTestWithMpstat (PacketLength, RemoteHostIP, LocalHostIP):
     print '{0:.0f}% CPU load on second Site, IP: {1} '.format(cpu_load_on_site2, IpAdress.IpSite2)
     print
     time.sleep(1)
-    return
 
 #Nuttcp test with Mpstat
 def FullNuttcpTestWithMpstat ():
@@ -1044,8 +1062,98 @@ def FullNetperfTestWithMpstat ():
         GeneralNetperfUdpTestWithMpstat (NetperfTestParamsClass.UDP1000, IpAdress.IpRemote, IpAdress.IpLocal)
         GeneralNetperfUdpTestWithMpstat (NetperfTestParamsClass.UDP512, IpAdress.IpRemote, IpAdress.IpLocal)
         GeneralNetperfUdpTestWithMpstat (NetperfTestParamsClass.UDP64, IpAdress.IpRemote, IpAdress.IpLocal)
-        GeneralNetperfUdpTestWithMpstat (IpAdress.IpRemote, IpAdress.IpLocal)
+        GeneralNetperfTcpTestWithMpstat (IpAdress.IpRemote, IpAdress.IpLocal)
         GeneralNetperfImixUdpTestWithMpstat(IpAdress.IpRemote, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, NetperfTestParamsClass.TimeForImixTest)
+
+##def SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile, RegExp, NumCoreForScatter, NunCoreForEncrypt, SummCoreOnRemoSterraGate):
+##    # chech correct of CPU affinity
+##    if int(NumCoreForScatter) + int(NunCoreForEncrypt) <= int(SummCoreOnRemoSterraGate):
+##        if SpeedTestParams.verbose:
+##            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " check of CPU affinity was successful on remote host: " + str (RemoteHostIP)
+##    else:
+##        sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + " check of CPU affinity was fail on remote host: " + str (RemoteHostIP)
+##    # get remote vpndrvr.conf file on local host
+##    GetFilesFromRemoteHost(RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile)
+##    # read local vpndrvr.conf file
+##    file = open(LocalVpndrvrFile, 'r')
+##    vpndrvr_conf = file.readlines()
+##    for line in vpndrvr_conf:
+##        if RegExp.match(line):
+##            NumScatterCoresBeforeReplacment = RegExp.match(line).group(1)
+##            NumEncryptCoresBeforeReplacment = RegExp.match(line).group(2)
+##            if SpeedTestParams.verbose:
+##                print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " CPU affinity on remote host: " + str(RemoteHostIP) + " before replacement: options vpndrvr cpu_distribution=\"*:" + \
+##                str(NumScatterCoresBeforeReplacment) + "/" +  str(NumEncryptCoresBeforeReplacment) + "\""
+##    # if current affinity are same with what you want  - do nothing
+##    if (int(NumScatterCoresBeforeReplacment) == int(NumCoreForScatter) ) and (int (NumEncryptCoresBeforeReplacment) == int(NunCoreForEncrypt)):
+##        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " CPU affinity don't change, on host: " + str(RemoteHostIP) + " because current affinity are same with what you want"
+##        file.close()
+##        return 1
+##    else:
+##        file = open(LocalVpndrvrFile, 'r+')
+##        for line in vpndrvr_conf:
+##            if not RegExp.match(line):
+##                file.writelines(line)
+##            else:
+##                file.writelines("options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\"\n")
+##        file.close()
+##        if SpeedTestParams.verbose:
+##            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + "New CPU affinity write on local file: " + str (LocalVpndrvrFile) + \
+##            ", current CPU affinity: options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\""
+##        # copy local vpndrvr.conf file to remote host
+##        PutLocalFileToRemoteHost (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile)
+
+def SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile, RegExp, NumCoreForScatter, NunCoreForEncrypt, SummCoreOnRemoSterraGate):
+    CpuDistributionOnRemoteSterraGate = False
+    # chech correct of CPU affinity
+    if int(NumCoreForScatter) + int(NunCoreForEncrypt) <= int(SummCoreOnRemoSterraGate):
+        if SpeedTestParams.verbose:
+            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Check of CPU affinity was successful on remote host: " + str (RemoteHostIP)
+        # get remote vpndrvr.conf file
+        GetFilesFromRemoteHost( RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile)
+        # read local vpndrvr.conf file
+        file = open(LocalVpndrvrFile, 'r')
+        vpndrvr_conf = file.readlines()
+        for line in vpndrvr_conf: # see all line in local vpndrvr.conf file
+            if RegExp.match(line):
+                CpuDistributionOnRemoteSterraGate = True # set CpuDistributionOnRemoteSterraGate = True if CPU affinity did set on remote host before
+                NumScatterCoresBeforeReplacment = RegExp.match(line).group(1) # get core for scatter before replacment
+                NumEncryptCoresBeforeReplacment = RegExp.match(line).group(2) # get core for encrypt before replacment
+                if SpeedTestParams.verbose:
+                    print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " CPU affinity on remote host: " + str(RemoteHostIP) + " before replacement: options vpndrvr cpu_distribution=\"*:" + \
+                    str(NumScatterCoresBeforeReplacment) + "/" +  str(NumEncryptCoresBeforeReplacment) + "\""
+        if not CpuDistributionOnRemoteSterraGate: # if CPU affinity didn't set on remote host
+            if SpeedTestParams.verbose:
+                print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " CPU affinity on remote host: " + str(RemoteHostIP) + " didn't set before change"
+            file = open(LocalVpndrvrFile, 'a+') # append to end
+            file.writelines("options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\"\n")
+            file.close()
+            PutLocalFileToRemoteHost (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile)
+            if SpeedTestParams.verbose:
+                print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " New CPU affinity write on local file: " + str (LocalVpndrvrFile) + \
+                ", current CPU affinity: options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\""
+        else:
+            if CpuDistributionOnRemoteSterraGate:
+                # if current affinity are same with what you want  - do nothing
+                if (int(NumScatterCoresBeforeReplacment) == int(NumCoreForScatter) ) and (int (NumEncryptCoresBeforeReplacment) == int(NunCoreForEncrypt)):
+                    print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " CPU affinity don't change, on host: " + str(RemoteHostIP) + " because current affinity are same with what you want"
+                    file.close()
+                    return 1
+                else:
+                    file = open(LocalVpndrvrFile, 'r+')
+                    for line in vpndrvr_conf:
+                        if not RegExp.match(line):
+                            file.writelines(line)
+                        else:
+                            file.writelines("options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\"\n")
+                    file.close()
+                    if SpeedTestParams.verbose:
+                        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + "New CPU affinity write on local file: " + str (LocalVpndrvrFile) + \
+                        ", current CPU affinity: options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\""
+                    # copy local vpndrvr.conf file to remote host
+                    PutLocalFileToRemoteHost (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile)
+    else:
+        sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + " Check of CPU affinity was fail on remote host: " + str(RemoteHostIP) + " because Cores for scatter + Cores for encrypt > Number of Cores on host")
 
 def ChoseTest ():
     if (SpeedTestParams.encrypt_alg == 'C') and (SpeedTestParams.traf_gen == 'netperf'):
@@ -1099,7 +1207,7 @@ def FullNetperfTestWithMpstat_IMIT ():
         print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
 def FullNetperfTestWithMpstat_ALL ():
-        print bcolors.HEADER + "**********Start test ALL with Netperf (Mpstat)**********" + bcolors.ENDC
+        print bcolors.HEADER + "**********Start tests C and CI and IMIT with Netperf (Mpstat)**********" + bcolors.ENDC
         FullNetperfTestWithMpstat_C ()
         FullNetperfTestWithMpstat_CI ()
         FullNetperfTestWithMpstat_IMIT ()
@@ -1111,20 +1219,93 @@ def FullNuttcpfTestWithMpstat_C ():
         FullNuttcpTestWithMpstat()
         print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
-# create exemplar of IpAdressClass()
-IpAdress = IpAdressClass()
-# create exemplar of SpeedTestParamsClass ()
-SpeedTestParams = SpeedTestParamsClass ()
-# parse parametrs of script
-ParsingParametrsOfScript ()
-# print summary table
-PrintSummaryOfTest ()
-# ping test
-if PingTest(IpAdress.GetIpList()) == 0:
-    if SpeedTestParams.verbose:
-        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Network test complete successfully"
-# chech installed soft
-CheckAllNecessarySoftForTest ()
-# chose test
-ChoseTest ()
+def FullNuttcpfTestWithMpstat_CI ():
+        print bcolors.HEADER + "**********Start test CIPHER and INTEGRITY with Nuttcp (Mpstat)**********" + bcolors.ENDC
+        ChangeLspOnRemoteSterraGate (IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, LspFilesClass.first_site_lsp_CI)
+        FullNuttcpTestWithMpstat()
+        print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
+
+def FullNuttcpfTestWithMpstat_IMIT ():
+        print bcolors.HEADER + "**********Start test IMIT with Nuttcp (Mpstat)**********" + bcolors.ENDC
+        ChangeLspOnRemoteSterraGate (IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, LspFilesClass.first_site_lsp_IMIT)
+        FullNuttcpTestWithMpstat()
+        print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
+
+def FullNuttcpfTestWithMpstat_ALL ():
+        print bcolors.HEADER + "**********Start tests C and CI and IMIT with Nuttcp (Mpstat)**********" + bcolors.ENDC
+        FullNuttcpfTestWithMpstat_C ()
+        FullNuttcpfTestWithMpstat_CI ()
+        FullNuttcpfTestWithMpstat_IMIT ()
+        print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
+
+def FullNuttcpfAndNetperfTestWithMpstat_ALL ():
+        print bcolors.HEADER + "**********Start tests C and CI and IMIT with Nuttcp and Netperf (Mpstat)**********" + bcolors.ENDC
+        FullNuttcpfTestWithMpstat_ALL ()
+        FullNetperfTestWithMpstat_ALL ()
+
+def FullNuttcpfAndNetperfTestWithMpstat_C ():
+        print bcolors.HEADER + "**********Start test CIPHER with Nuttcp and Netperf (Mpstat)**********" + bcolors.ENDC
+        FullNetperfTestWithMpstat_C ()
+        FullNuttcpfTestWithMpstat_C ()
+
+def FullNuttcpfAndNetperfTestWithMpstat_CI ():
+        print bcolors.HEADER + "**********Start test CIPHER and INTEGRITY with Nuttcp and Netperf (Mpstat)**********" + bcolors.ENDC
+        FullNetperfTestWithMpstat_CI ()
+        FullNuttcpfTestWithMpstat_CI ()
+
+def FullNuttcpfAndNetperfTestWithMpstat_IMIT ():
+        print bcolors.HEADER + "**********Start test IMIT with Nuttcp and Netperf (Mpstat)**********" + bcolors.ENDC
+        FullNetperfTestWithMpstat_IMIT ()
+        FullNuttcpfTestWithMpstat_IMIT ()
+
+def FullNuttcpfAndNetperfTestWithMpstat_NOLSP ():
+        print bcolors.HEADER + "**********Start test NOLSP with Nuttcp and Netperf (Mpstat)**********" + bcolors.ENDC
+        FullNetperfTestWithMpstat ()
+        FullNuttcpTestWithMpstat ()
+        print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
+
+def FullNuttcpfTestWithMpstat_NOLSP ():
+        print bcolors.HEADER + "**********Start test NOLSP with Nuttcp (Mpstat)**********" + bcolors.ENDC
+        FullNuttcpTestWithMpstat ()
+        print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
+
+def FullNetperfTestWithMpstat_NOLSP ():
+        print bcolors.HEADER + "**********Start test NOLSP with Netperf (Mpstat)**********" + bcolors.ENDC
+        FullNetperfTestWithMpstat ()
+        print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
+try:
+    # create exemplar of IpAdressClass()
+    IpAdress = IpAdressClass()
+    # create exemplar of SpeedTestParamsClass ()
+    SpeedTestParams = SpeedTestParamsClass ()
+    # parse parametrs of script
+    ParsingParametrsOfScript ()
+    # print summary table
+    PrintSummaryOfTest ()
+    # ping test
+    if PingTest(IpAdress.GetIpList()) == 0:
+        if SpeedTestParams.verbose:
+            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Network test complete successfully"
+    # chech installed soft
+    CheckAllNecessarySoftForTest ()
+    # set CPU affinity
+    if SpeedTestParams.cpu_aff_on_site1 != False:
+        SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, \
+        VpndrvrFilesClass.LocalVpndrvrFile, VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp, SpeedTestParams.number_cpu_for_scatter_on_site1, \
+        SpeedTestParams.number_cpu_for_encrypt_on_site1, GetNumberOfProcessorsOnRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password))
+    if SpeedTestParams.cpu_aff_on_site2 != False:
+        SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, \
+        VpndrvrFilesClass.LocalVpndrvrFile, VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp, SpeedTestParams.number_cpu_for_scatter_on_site2, \
+        SpeedTestParams.number_cpu_for_encrypt_on_site2, GetNumberOfProcessorsOnRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password))
+
+    # copy local LSP to Sites if encryp alg not NOLSP
+    if SpeedTestParams.encrypt_alg != 'NOLSP' :
+        PutLocalLspToRemoteHost (IpAdress.IpSite1, IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password)
+    else:
+        if SpeedTestParams.verbose:
+            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Chose NOLSP test"
+    # chose test
+    ChoseTest ()
+except KeyboardInterrupt:
+    sys.exit(bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Test was stopped")
 
