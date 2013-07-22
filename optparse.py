@@ -1,4 +1,4 @@
-#!/usr/bin/python
+﻿#!/usr/bin/python
 import os
 import hashlib
 import time
@@ -102,8 +102,8 @@ class SpeedTestParamsClass:
     traf_gen = ''
     iterations = 1
     time_sync_on_sites = False
-    cpu_aff_on_site1 = False
-    cpu_aff_on_site2 = False
+    cpu_aff_on_site1 = True
+    cpu_aff_on_site2 = True
     number_cpu_for_scatter_on_site1 = 1
     number_cpu_for_encrypt_on_site1 = 1
     number_cpu_for_scatter_on_site2 = 1
@@ -133,13 +133,13 @@ parser.add_option('--encr_alg', help='Encryption algorithm. A default value [%de
 parser.add_option('--traf_gen', help='Traffic generator. A default value [%default]', dest='traf_gen', action='store', metavar='{nuttcp | netperf | ALL}', default='netperf')
 parser.add_option('--iterations', help='Test iterations. A default value [%default]', dest='iterations', action='store', metavar='{integer}', type='int', default=1)
 parser.add_option('--time_sync_on_sites', help='Time syncr on two IPsec Sites. A default value [%default]', dest='time_sync_on_sites', default=False, action='store_true')
-parser.add_option('--cpu_aff_on_site1', help='Set CPU affinity on first IPsec Site. A default value [%default]', dest='cpu_aff_on_site1', default=False, action='store', metavar='{{int},{int}}', nargs=2, type='int')
+parser.add_option('--cpu_aff_on_site1', help='Set CPU affinity on first IPsec Site. A default value [%default]', dest='cpu_aff_on_site1', default=False, action='store', metavar='{{num cores for scatter} {num cores for encrypt}}', nargs=2, type='int')
 parser.add_option('--cpu_aff_on_site2', help='Set CPU affinity on second IPsec Site. A default value [%default]', dest='cpu_aff_on_site2', default=False, action='store', metavar='{{int},{int}}', nargs=2, type='int')
 #parser.add_option('--check', help='Check all necessary soft and files for test . A default value [%default]', dest='check', default=False, action='store_true')
 parser.add_option('--verbose', help='More information during the test. A default value [%default]', dest='verbose', default=False, action='store_true')
 (opts, args) = parser.parse_args()
 
-def CheckStartrRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName):
+def CheckStartRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName):
     # if return status is 0 - remote daemon is now running
     # if return status is 1 - remote daemon is not running
 
@@ -154,20 +154,20 @@ def CheckStartrRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName)
     try:
         s.connect(RemoteHostIP, Port, Username, Password)
     except:
-        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+        sys.exit(bcolors.FAIL + "[Error in CheckStartRemoteDaemon]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
     else:
         stdin, stdout, stderr = s.exec_command(check_daemon_is_starting)
         status = stdout.channel.recv_exit_status()
         if (status != 0) and (status != 1):
             s.close()
-            sys.exit(bcolors.FAIL + "[Error in CheckStartrRemoteDaemon]:" + bcolors.ENDC + "Can't check start remote daemon: " + str(DaemonName) + " on host: " + \
+            sys.exit(bcolors.FAIL + "[Error in CheckStartRemoteDaemon]:" + bcolors.ENDC + "  Can't check start remote daemon: " + str(DaemonName) + " on host: " + \
             str (RemoteHostIP) + " .Was obtained unknown status: " + str(status))
         else:
             if SpeedTestParams.verbose:
                 if status == 0:
-                    print bcolors.OKGREEN + "[Info in CheckStartrRemoteDaemon]: " + bcolors.ENDC + " Daemon:" + str(DaemonName) + " is running now" + " on remote host: " + str (RemoteHostIP)
+                    print bcolors.OKGREEN + "[Info in CheckStartRemoteDaemon]: " + bcolors.ENDC + " Daemon: " + str(DaemonName) + " is running now" + " on remote host: " + str (RemoteHostIP)
                 else:
-                    print bcolors.OKGREEN + "[Info in CheckStartrRemoteDaemon]: " + bcolors.ENDC + " Daemon:" + str(DaemonName) + " not running now" + " on remote host: " + str (RemoteHostIP)
+                    print bcolors.OKGREEN + "[Info in CheckStartRemoteDaemon]: " + bcolors.ENDC + " Daemon: " + str(DaemonName) + " not running now" + " on remote host: " + str (RemoteHostIP)
     s.close()
     return status
 
@@ -176,7 +176,7 @@ def StopRemoteDaemonThroughInitd (RemoteHostIP, Port, Username, Password, Daemon
     # if return status is 1 - remote daemon already not running
 
     # check what remote daemon is start
-    if CheckStartrRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName) == 0:
+    if CheckStartRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName) == 0:
         stop_remote_daemon = "/etc/init.d/" + str(DaemonName) + " stop"
         # print bcolors.OKGREEN + "Info: " + bcolors.ENDC +
         paramiko.util.log_to_file('paramiko.log')
@@ -194,7 +194,7 @@ def StopRemoteDaemonThroughInitd (RemoteHostIP, Port, Username, Password, Daemon
                 sys.exit(bcolors.FAIL + "[Error in StopRemoteDaemonThroughInitd]: " + bcolors.ENDC + " Can't stop remote daemon: " + str(DaemonName) + " on remote host: " + str(RemoteHostIP))
             else:
                 if SpeedTestParams.verbose:
-                    print bcolors.OKGREEN + "[Info in StopRemoteDaemonThroughInitd]: " + bcolors.ENDC + " Daemon:" + str(DaemonName) + " was stopped" + " on remote host: " + str (RemoteHostIP)
+                    print bcolors.OKGREEN + "[Info in StopRemoteDaemonThroughInitd]: " + bcolors.ENDC + " Daemon: " + str(DaemonName) + " was stopped" + " on remote host: " + str (RemoteHostIP)
             s.close()
             return 0
     else:
@@ -205,7 +205,7 @@ def StartRemoteDaemonThroughInitd (RemoteHostIP, Port, Username, Password, Daemo
     # if return status is 1 - remote daemon already start
 
     # check what remote daemon already not start
-    if CheckStartrRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName) == 1:
+    if CheckStartRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName) == 1:
         start_remote_daemon = "/etc/init.d/" + str(DaemonName) + " start"
         # print bcolors.OKGREEN + "Info: " + bcolors.ENDC +
         paramiko.util.log_to_file('paramiko.log')
@@ -223,7 +223,7 @@ def StartRemoteDaemonThroughInitd (RemoteHostIP, Port, Username, Password, Daemo
                 sys.exit(bcolors.FAIL + "[Error in StartRemoteDaemonThroughInitd]: " + bcolors.ENDC + " Can't start remote daemon: " + str(DaemonName) + " on remote host: " + str(RemoteHostIP))
             else:
                 if SpeedTestParams.verbose:
-                    print bcolors.OKGREEN + "[Info in StartRemoteDaemonThroughInitd]: " + bcolors.ENDC + " Daemon:" + str(DaemonName) + " was starter" + " on remote host: " + str (RemoteHostIP)
+                    print bcolors.OKGREEN + "[Info in StartRemoteDaemonThroughInitd]: " + bcolors.ENDC + " Daemon: " + str(DaemonName) + " was starter" + " on remote host: " + str (RemoteHostIP)
             s.close()
             return 0
     else:
@@ -270,7 +270,7 @@ def CheckStartrLocalDaemon (DaemonName):
     daemon_is_start_out = daemon_is_start.communicate()[0].splitlines()
     status = daemon_is_start.returncode
     if (status != 0) and (status != 1):
-        sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + "Can't check start local daemon: " + str(DaemonName) + " . Was obtained unknown status: " + str(status))
+        sys.exit(bcolors.FAIL + "[Error in CheckStartrLocalDaemon]: " + bcolors.ENDC + " Can't check start local daemon: " + str(DaemonName) + ". Was obtained unknown status: " + str(status))
     return status
 
 def StartRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName, Parametrs = '', OutputFile = ''):
@@ -278,7 +278,7 @@ def StartRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName, Param
     # if return status is 1 - remote daemon was't start
 
     # check what remote daemon is't stat
-    if CheckStartrRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName) == 0:
+    if CheckStartRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName) == 0:
         return 1
     else:
         if OutputFile == '':
@@ -289,13 +289,13 @@ def StartRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName, Param
             try:
                 s.connect(RemoteHostIP, Port, Username, Password)
             except:
-                sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+                sys.exit(bcolors.FAIL + "[Error in StartRemoteDaemon]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
             else:
                 stdin, stdout, stderr = s.exec_command(start_remote_daemon)
                 status = stdout.channel.recv_exit_status()
                 if (status != 0) and (status != 1):
                     s.close()
-                    sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + "Can't start remote daemon: " + str(DaemonName) + " On host: " + \
+                    sys.exit(bcolors.FAIL + "[Error in StartRemoteDaemon]: " + bcolors.ENDC + " Can't start remote daemon: " + str(DaemonName) + " On host: " + \
                     str (RemoteHostIP) + " . Was obtained unknown status: " + str(status))
                 s.close()
                 return status
@@ -308,13 +308,13 @@ def StartRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName, Param
                 try:
                     s.connect(RemoteHostIP, Port, Username, Password)
                 except:
-                    sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+                    sys.exit(bcolors.FAIL + "[Error in StartRemoteDaemon]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
                 else:
                     stdin, stdout, stderr = s.exec_command(start_remote_daemon)
                     status = stdout.channel.recv_exit_status()
                     if (status != 0) and (status != 1):
                         s.close()
-                        sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + "Can't start remote daemon: " + str(DaemonName) + " On host: " + \
+                        sys.exit(bcolors.FAIL + "[Error in StartRemoteDaemon]: " + bcolors.ENDC + " Can't start remote daemon: " + str(DaemonName) + " On host: " + \
                         str (RemoteHostIP) + " . Was obtained unknown status: " + str(status))
                     s.close()
                     return status
@@ -334,7 +334,7 @@ def StartLocalDaemon (DaemonName, Parametrs = '', OutputFile = ''):
             daemon_start_out = daemon_is_start.communicate()[0].splitlines()
             status = daemon_is_start.returncode
             if (status != 0) and (status != 1):
-                sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + "Can't start local daemon: " + str(DaemonName) + " . Was obtained unknown status: " + str(status))
+                sys.exit(bcolors.FAIL + "[Error in StartLocalDaemon]: " + bcolors.ENDC + " Can't start local daemon: " + str(DaemonName) + " . Was obtained unknown status: " + str(status))
             return status
         else:
             if OutputFile != '':
@@ -344,7 +344,7 @@ def StartLocalDaemon (DaemonName, Parametrs = '', OutputFile = ''):
                 daemon_start_out = daemon_is_start.communicate()[0].splitlines()
                 status = daemon_is_start.returncode
                 if (status != 0) and (status != 1):
-                    sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + "Can't start local daemon: " + str(DaemonName) + " . Was obtained unknown status: " + str(status))
+                    sys.exit(bcolors.FAIL + "[Error in StartLocalDaemon]: " + bcolors.ENDC + " Can't start local daemon: " + str(DaemonName) + " . Was obtained unknown status: " + str(status))
                 return status
     return
 
@@ -359,13 +359,13 @@ def StartAnotherInstanceOfDaemonOnRemoteHostWithAdditionalParams (RemoteHostIP, 
         try:
             s.connect(RemoteHostIP, Port, Username, Password)
         except:
-            sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+            sys.exit(bcolors.FAIL + "[Error in StartAnotherInstanceOfDaemonOnRemoteHostWithAdditionalParams]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
         else:
             stdin, stdout, stderr = s.exec_command(start_remote_daemon)
             status = stdout.channel.recv_exit_status()
             if (status != 0) and (status != 1):
                     s.close()
-                    sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + "Can't start another instance of remote daemon: " + str(DaemonName) + " On host: " + \
+                    sys.exit(bcolors.FAIL + "[Error in StartAnotherInstanceOfDaemonOnRemoteHostWithAdditionalParams]: " + bcolors.ENDC + " Can't start another instance of remote daemon: " + str(DaemonName) + " On host: " + \
                     str (RemoteHostIP) + " . Was obtained unknown status: " + str(status))
             s.close()
             return status
@@ -378,13 +378,13 @@ def StartAnotherInstanceOfDaemonOnRemoteHostWithAdditionalParams (RemoteHostIP, 
             try:
                 s.connect(RemoteHostIP, Port, Username, Password)
             except:
-                sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+                sys.exit(bcolors.FAIL + "[Error in StartAnotherInstanceOfDaemonOnRemoteHostWithAdditionalParams]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
             else:
                 stdin, stdout, stderr = s.exec_command(start_remote_daemon)
                 status = stdout.channel.recv_exit_status()
                 if (status != 0) and (status != 1):
                     s.close()
-                    sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + "Can't start another instance of remote daemon: " + str(DaemonName) + " On host: " + \
+                    sys.exit(bcolors.FAIL + "[Error in StartAnotherInstanceOfDaemonOnRemoteHostWithAdditionalParams]: " + bcolors.ENDC + " Can't start another instance of remote daemon: " + str(DaemonName) + " On host: " + \
                     str (RemoteHostIP) + " . Was obtained unknown status: " + str(status))
                 s.close()
                 return status
@@ -394,7 +394,7 @@ def StopRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName):
     # if return status is 1 - remote daemon already not running
 
     # check what remote daemon is start
-    if CheckStartrRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName) == 0:
+    if CheckStartRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName) == 0:
         stop_remote_daemon = "killall " + str(DaemonName)
         paramiko.util.log_to_file('paramiko.log')
         s = paramiko.SSHClient()
@@ -402,13 +402,13 @@ def StopRemoteDaemon (RemoteHostIP, Port, Username, Password, DaemonName):
         try:
             s.connect(RemoteHostIP, Port, Username, Password)
         except:
-            sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+            sys.exit(bcolors.FAIL + "[Error in StopRemoteDaemon]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
         else:
             stdin, stdout, stderr = s.exec_command(stop_remote_daemon)
             status = stdout.channel.recv_exit_status()
             if status != 0:
                 s.close()
-                sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Can't stop remote daemon: " + str(DaemonName) + " on remote host: " + str(RemoteHostIP))
+                sys.exit(bcolors.FAIL + "[Error in StopRemoteDaemon]: " + bcolors.ENDC + " Can't stop remote daemon: " + str(DaemonName) + " on remote host: " + str(RemoteHostIP))
             s.close()
     else:
         return 1
@@ -426,7 +426,7 @@ def StopLocalDaemon (DaemonName):
         daemon_stop_out = daemon_stop.communicate()[0].splitlines()
         status = daemon_stop.returncode
         if status != 0:
-            sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Can't stop local daemon: " + str(DaemonName))
+            sys.exit(bcolors.FAIL + "[Error in StopLocalDaemon]: " + bcolors.ENDC + " Can't stop local daemon: " + str(DaemonName))
     else:
         return 1
     return status
@@ -457,12 +457,61 @@ def RestartLocalDaemon (DaemonName, Parametrs = '', OutputFile = ''):
         else:
             return 1
 
+def SetTimeOnRemoteHostAsLocalHost (RemoteHostIP, Port, Username, Password):
+    get_time_on_local_host = "date +%m%d%H%M%G"
+    get_time = sp.Popen(get_time_on_local_host, shell=True, executable='/bin/bash', stdout=sp.PIPE)
+    time = get_time.communicate()[0].splitlines()[0]
+    status_of_get_time = get_time.returncode
+    if status_of_get_time == 0:
+        if SpeedTestParams.verbose:
+            print bcolors.OKGREEN + "[Info in SetTimeOnRemoteHostAsLocalHost]: " + bcolors.ENDC + " Time on local host: " + str (time)
+        set_time = "date " + str(time)
+        s = paramiko.SSHClient()
+        s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            s.connect(RemoteHostIP, Port, Username, Password)
+        except:
+            sys.exit(bcolors.FAIL + "[Error in SetTimeOnRemoteHostAsLocalHost]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+        else:
+            stdin, stdout, stderr = s.exec_command(set_time)
+            status_of_set_time = stdout.channel.recv_exit_status()
+            if status_of_set_time == 0:
+                if SpeedTestParams.verbose:
+                    print bcolors.OKGREEN + "[Info in SetTimeOnRemoteHostAsLocalHost]: " + bcolors.ENDC + " Time on remote host was set: " + str (time)
+            else:
+                sys.exit(bcolors.FAIL + "[Error in SetTimeOnRemoteHostAsLocalHost]: " + bcolors.ENDC + " Can't set time on remote host: " + str(RemoteHostIP))
+        finally:
+            s.close()
+    else:
+        sys.exit(bcolors.FAIL + "[Error in SetTimeOnRemoteHostAsLocalHost]: " + bcolors.ENDC + " Can't get time with local host")
+
+def GetTimeFromRemoteHost (RemoteHostIP, Port, Username, Password):
+    get_time = "date"
+    s = paramiko.SSHClient()
+    s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        s.connect(RemoteHostIP, Port, Username, Password)
+    except:
+        sys.exit(bcolors.FAIL + "[Error in GetTimeFromRemoteHost]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+    else:
+        stdin, stdout, stderr = s.exec_command(get_time)
+        status_of_get_time = stdout.channel.recv_exit_status()
+        if status_of_get_time == 0:
+            time = stdout.readlines()[0]
+            if SpeedTestParams.verbose:
+                print bcolors.OKGREEN + "[Info in GetTimeFromRemoteHost]: " + bcolors.ENDC + " Time: " + str(time) + " on remote host: " + str(RemoteHostIP)
+            return time
+        else:
+            sys.exit(bcolors.FAIL + "[Error in GetTimeFromRemoteHost]: " + bcolors.ENDC + " Can't get time from remote host: " + str(RemoteHostIP))
+    finally:
+        s.close()
+
 def ParsingParametrsOfScript ():
     # check local traffic generator machine IP
     try:
         IPy.IP(opts.ip_local)
     except:
-        print bcolors.FAIL + "Error:" + bcolors.ENDC + " wrong format of IPv4 Address: " + str(opts.ip_local)
+        print bcolors.FAIL + "[Error in ParsingParametrsOfScript]: " + bcolors.ENDC + " Wrong format of IPv4 Address: " + str(opts.ip_local)
         parser.print_help()
         sys.exit()
     else:
@@ -471,7 +520,7 @@ def ParsingParametrsOfScript ():
     try:
         IPy.IP(opts.ip_remote)
     except:
-        print bcolors.FAIL + "Error:" + bcolors.ENDC + " wrong format of IPv4 Address: " + str(opts.ip_remote)
+        print bcolors.FAIL + "[Error in ParsingParametrsOfScript]:" + bcolors.ENDC + " Wrong format of IPv4 Address: " + str(opts.ip_remote)
         parser.print_help()
         sys.exit()
     else:
@@ -480,7 +529,7 @@ def ParsingParametrsOfScript ():
     try:
         IPy.IP(opts.ip_site1)
     except:
-        print bcolors.FAIL + "Error:" + bcolors.ENDC + " wrong format of IPv4 Address: " + str(opts.ip_site1)
+        print bcolors.FAIL + "[Error in ParsingParametrsOfScript]: " + bcolors.ENDC + " Wrong format of IPv4 Address: " + str(opts.ip_site1)
         parser.print_help()
         sys.exit()
     else:
@@ -489,7 +538,7 @@ def ParsingParametrsOfScript ():
     try:
         IPy.IP(opts.ip_site2)
     except:
-        print bcolors.FAIL + "Error:" + bcolors.ENDC + " wrong format of IPv4 Address: " + str(opts.ip_site2)
+        print bcolors.FAIL + "[Error in ParsingParametrsOfScript]: " + bcolors.ENDC + " Wrong format of IPv4 Address: " + str(opts.ip_site2)
         parser.print_help()
         sys.exit()
     else:
@@ -501,7 +550,7 @@ def ParsingParametrsOfScript ():
         if opts.encr_alg in ('C', 'CI', 'IMIT', 'ALL'):
             SpeedTestParams.encrypt_alg = opts.encr_alg
         else:
-            print bcolors.FAIL + "Error:" + bcolors.ENDC + " unknown encryption algorithm: " + str(opts.encr_alg)
+            print bcolors.FAIL + "[Error in ParsingParametrsOfScript]: " + bcolors.ENDC + " Unknown encryption algorithm: " + str(opts.encr_alg)
             parser.print_help()
             sys.exit()
     # check traffic generator
@@ -511,7 +560,7 @@ def ParsingParametrsOfScript ():
         if opts.traf_gen in ('nuttcp', 'ALL'):
             SpeedTestParams.traf_gen = opts.traf_gen
         else:
-            print bcolors.FAIL + "Error:" + bcolors.ENDC + " unknown traffic generator: " + str(opts.traf_gen)
+            print bcolors.FAIL + "[Error in ParsingParametrsOfScript]: " + bcolors.ENDC + " Unknown traffic generator: " + str(opts.traf_gen)
             parser.print_help()
             sys.exit()
     # check time syncr
@@ -550,6 +599,9 @@ def PrintSummaryOfTest ():
     print 'Encryption algorithm:            ', SpeedTestParams.encrypt_alg
     print 'Traffic generator:               ', SpeedTestParams.traf_gen
     print 'Time sync on sites:              ', SpeedTestParams.time_sync_on_sites
+    if SpeedTestParams.time_sync_on_sites:
+        print "     Current time on Site 1: ", GetTimeFromRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password)
+        print "     Current time on Site 2: ", GetTimeFromRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password)
     print 'CPU aff. on Site 1:              ', SpeedTestParams.cpu_aff_on_site1
     if SpeedTestParams.cpu_aff_on_site1 == True:
         print '     Num. Cores for scatter on Site 1: ', SpeedTestParams.number_cpu_for_scatter_on_site1
@@ -564,7 +616,7 @@ def PrintSummaryOfTest ():
 def PingTest (IPlist):
     number_of_reachable_ip = 0
     if len(IPlist) == 0:
-        sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + " PingTest(IPlist), IPlist is Null")
+        sys.exit(bcolors.FAIL + "[Error in PingTest]: " + bcolors.ENDC + " PingTest(IPlist), IPlist is Null")
     if len(IPlist) == 1:
         ping = sp.Popen("ping -c 1 -w 1 " + str(IPlist[0]), shell=True, executable='/bin/bash', stdout=sp.PIPE)
         PingOtputs = ping.communicate()[0]
@@ -578,7 +630,7 @@ def PingTest (IPlist):
             if status == 0:
                 number_of_reachable_ip = number_of_reachable_ip +1
             else:
-                sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + " IP " + str(IP) + " Unreachable, check the network settings")
+                sys.exit(bcolors.FAIL + "[Error in PingTest]: " + bcolors.ENDC + " IP " + str(IP) + " Unreachable, check the network settings")
     return 0
 
 def CheckInstallProgramOnRemoteHost(RemoteHostIP, Port, Username, Password, ProgramName):
@@ -595,23 +647,22 @@ def CheckInstallProgramOnRemoteHost(RemoteHostIP, Port, Username, Password, Prog
     else:
         s.close()
         return status
-        #sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + "Programm: " + str(ProgramName) + " on remote host: " + str(RemoteHostIP) + " not installed. Get status:" + str(status))
 
 def CheckAllNecessarySoftForTest ():
     if CheckInstallProgramOnRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat') != 0:
-        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " mpstat not installed on the remote host: " + str(IpAdress.IpSite1))
+        sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Mpstat not installed on the remote host: " + str(IpAdress.IpSite1))
     if CheckInstallProgramOnRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat') != 0:
-        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " mpstat not installed on the remote host: " + str(IpAdress.IpSite2))
+        sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Mpstat not installed on the remote host: " + str(IpAdress.IpSite2))
     if CheckInstallProgramOnRemoteHost(IpAdress.IpRemote, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'netperf') != 0:
-        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " netperf not installed on the remote host: " + str(IpAdress.IpRemote))
+        sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Netperf not installed on the remote host: " + str(IpAdress.IpRemote))
     if CheckInstallProgramOnRemoteHost(IpAdress.IpLocal, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'netperf') != 0:
-        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " netperf not installed on the remote host: " + str(IpAdress.IpLocal))
+        sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Netperf not installed on the remote host: " + str(IpAdress.IpLocal))
     if CheckInstallProgramOnRemoteHost(IpAdress.IpRemote, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'nuttcp') != 0:
-        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " nuttcp not installed on the remote host: " + str(IpAdress.IpRemote))
+        sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Nuttcp not installed on the remote host: " + str(IpAdress.IpRemote))
     if CheckInstallProgramOnRemoteHost(IpAdress.IpLocal, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'nuttcp') != 0:
-        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " nuttcp not installed on the remote host: " + str(IpAdress.IpLocal))
+        sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Nuttcp not installed on the remote host: " + str(IpAdress.IpLocal))
     if SpeedTestParams.verbose:
-        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " All necessary soft installed"
+        print bcolors.OKGREEN + "[Info in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " All necessary soft installed"
 
 def ChangeLspOnRemoteSterraGate (RemoteHostIP, Port, Username, Password, RemoteLSP):
         try:
@@ -620,28 +671,28 @@ def ChangeLspOnRemoteSterraGate (RemoteHostIP, Port, Username, Password, RemoteL
             s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             s.connect(RemoteHostIP, Port, Username, Password, timeout = 3.0)
         except:
-            sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+            sys.exit(bcolors.FAIL + "[Error in ChangeLspOnRemoteSterraGate]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
         else:
             check_lsp = 'lsp_mgr check -f ' + str(RemoteLSP)
             if SpeedTestParams.verbose:
-                print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Check LSP command: " + str(check_lsp)
+                print bcolors.OKGREEN + "[Info in ChangeLspOnRemoteSterraGate]: " + bcolors.ENDC + " Check LSP command: " + str(check_lsp)
             stdin, stdout, stderr = s.exec_command(check_lsp)
             status = stdout.channel.recv_exit_status()
             if status != 0:
-                sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Can't check LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP))
+                sys.exit(bcolors.FAIL + "[Error in ChangeLspOnRemoteSterraGate]: " + bcolors.ENDC + " Can't check LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP))
             else:
                 if status == 0:
                     if SpeedTestParams.verbose:
-                        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Check LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP) + " was successful"
+                        print bcolors.OKGREEN + "[Info in ChangeLspOnRemoteSterraGate]: " + bcolors.ENDC + " Check LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP) + " was successful"
                     load_lsp = 'lsp_mgr load -f ' + str(RemoteLSP)
                     stdin, stdout, stderr = s.exec_command(load_lsp)
                     status = stdout.channel.recv_exit_status()
                     if status !=0:
-                        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Can't load LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP))
+                        sys.exit(bcolors.FAIL + "[Error in ChangeLspOnRemoteSterraGate]: " + bcolors.ENDC + " Can't load LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP))
                     else:
                         if status == 0:
                             if SpeedTestParams.verbose:
-                                print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Load LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP) + " was successful"
+                                print bcolors.OKGREEN + "[Info in ChangeLspOnRemoteSterraGate]: " + bcolors.ENDC + " Load LSP file: " + str(RemoteLSP) + " on remote host: " + str(RemoteHostIP) + " was successful"
         finally:
             s.close()
         return 0
@@ -649,77 +700,77 @@ def ChangeLspOnRemoteSterraGate (RemoteHostIP, Port, Username, Password, RemoteL
 def PutLocalFileToRemoteHost (RemoteHostIP, Port, Username, Password, LocalFile, RemoteFile):
     if os.path.isfile(LocalFile): # check to exitst of local file
         if SpeedTestParams.verbose:
-            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Local file: " + str(LocalFile) + " exists"
+            print bcolors.OKGREEN + "[Info in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " Local file: " + str(LocalFile) + " exists"
         hash_of_local_file = MD5Checksum (LocalFile) # calculate hash of local file
         if SpeedTestParams.verbose:
-            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " MD5 hash: " + str(hash_of_local_file) + " of local file: " + str(LocalFile)
+            print bcolors.OKGREEN + "[Info in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " MD5 hash: " + str(hash_of_local_file) + " of local file: " + str(LocalFile)
         try:
             paramiko.util.log_to_file('paramiko.log')
             s = paramiko.SSHClient()
             s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             s.connect(RemoteHostIP, Port, Username, Password)
         except:
-            sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+            sys.exit(bcolors.FAIL + "[Error in PutLocalFileToRemoteHost]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
         else:
             sftp = s.open_sftp()
             try:
                 sftp.stat(RemoteFile)
             except IOError:
                 if SpeedTestParams.verbose:
-                    print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Remote file: " + str (RemoteFile) + " on host: " + str (RemoteHostIP) + " does't not exist"
+                    print bcolors.OKGREEN + "[Info in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " Remote file: " + str (RemoteFile) + " on host: " + str (RemoteHostIP) + " does't not exist"
                 try:
                     sftp.put(LocalFile, RemoteFile) # if file does't exist on remote host copy local file to remote host
                 except IOError:
-                    sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Can't copy file: " + str(LocalFile) + " to remote host: " + str(RemoteHostIP))
+                    sys.exit(bcolors.FAIL + "[Error in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " Can't copy file: " + str(LocalFile) + " to remote host: " + str(RemoteHostIP))
                 else:
                     if SpeedTestParams.verbose:
-                        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Local file: " + str (LocalFile) + " was copy to host: " + str (RemoteHostIP) + " its name: " + str(RemoteFile)
+                        print bcolors.OKGREEN + "[Info in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " Local file: " + str (LocalFile) + " was copy to host: " + str (RemoteHostIP) + " its name: " + str(RemoteFile)
                     return 0
             else:
                 if SpeedTestParams.verbose:
-                    print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Remote file: " + str (RemoteFile) + " on host: " + str (RemoteHostIP) + " exist"
+                    print bcolors.OKGREEN + "[Info in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " Remote file: " + str (RemoteFile) + " on host: " + str (RemoteHostIP) + " exist"
                 temp_remote_file_on_local_host = os.path.join(os.path.dirname(RemoteFile), "temp_" + os.path.basename(RemoteFile)) # create temp_ suffix for remote file that copy it on local host to calculate md5 hash
                 if SpeedTestParams.verbose:
-                    print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Name of temp file (for remote file) is: " + str (temp_remote_file_on_local_host)
+                    print bcolors.OKGREEN + "[Info in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " Name of temp file (for remote file) is: " + str (temp_remote_file_on_local_host)
                 sftp.get(RemoteFile, temp_remote_file_on_local_host) # get remote file to local host
                 hash_of_temp_remote_file = MD5Checksum(temp_remote_file_on_local_host) # calculate md5 hash for temp file
                 if SpeedTestParams.verbose:
-                    print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " MD5 hash: " + str(hash_of_temp_remote_file) + " of temp local file: " + str(temp_remote_file_on_local_host) + " from remote host: " + str(RemoteHostIP)
+                    print bcolors.OKGREEN + "[Info in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " MD5 hash: " + str(hash_of_temp_remote_file) + " of temp local file: " + str(temp_remote_file_on_local_host) + " from remote host: " + str(RemoteHostIP)
                 if hash_of_local_file == hash_of_temp_remote_file:
                     if SpeedTestParams.verbose:
-                        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " MD5 hashs of: " + str(temp_remote_file_on_local_host) + " and: " + str(LocalFile) + " are same"
+                        print bcolors.OKGREEN + "[Info in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " MD5 hashs of: " + str(temp_remote_file_on_local_host) + " and: " + str(LocalFile) + " are same"
                     os.remove(temp_remote_file_on_local_host) # if remote and local files are same - del temp file
                     if SpeedTestParams.verbose:
-                        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Temp file (for remote file): " + str (temp_remote_file_on_local_host) + " was deleted"
+                        print bcolors.OKGREEN + "[Info in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " Temp file (for remote file): " + str (temp_remote_file_on_local_host) + " was deleted"
                     return 0
                 else:
                     if hash_of_local_file != hash_of_temp_remote_file: # if remote and local files are not same
                         if SpeedTestParams.verbose:
-                            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " MD5 hashs of: " + str(temp_remote_file_on_local_host) + " and: " + str(LocalFile) + " are not same"
+                            print bcolors.OKGREEN + "[Info in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " MD5 hashs of: " + str(temp_remote_file_on_local_host) + " and: " + str(LocalFile) + " are not same"
                         try:
                             sftp.remove(RemoteFile)
                         except:
-                            sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Can't remove file: " + str(RemoteFile) + " from remote host: " +str(RemoteHostIP))
+                            sys.exit(bcolors.FAIL + "[Error in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " Can't remove file: " + str(RemoteFile) + " from remote host: " +str(RemoteHostIP))
                         else:
                             if SpeedTestParams.verbose:
-                                print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Remote file: " + str (RemoteFile) + " on host: " + str (RemoteHostIP) + " was deleted"
+                                print bcolors.OKGREEN + "[Info in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " Remote file: " + str (RemoteFile) + " on host: " + str (RemoteHostIP) + " was deleted"
                             os.remove(temp_remote_file_on_local_host)
                             if SpeedTestParams.verbose:
-                                print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Temp file (for remote file): " + str (temp_remote_file_on_local_host) + " was deleted"
+                                print bcolors.OKGREEN + "[Info in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " Temp file (for remote file): " + str (temp_remote_file_on_local_host) + " was deleted"
                             sftp.put(LocalFile, RemoteFile)
                             if SpeedTestParams.verbose:
-                                print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Local file: " + str(LocalFile) + " was copy to host: " + str(RemoteHostIP) + " its name: " + str(RemoteFile)
+                                print bcolors.OKGREEN + "[Info in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " Local file: " + str(LocalFile) + " was copy to host: " + str(RemoteHostIP) + " its name: " + str(RemoteFile)
                             return 0
         finally:
             s.close()
     else:
-        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Local file: " + str(LocalFile) + " does't exists")
+        sys.exit(bcolors.FAIL + "[Error in PutLocalFileToRemoteHost]: " + bcolors.ENDC + " Local file: " + str(LocalFile) + " does't exists")
 
 def MD5Checksum(FilePath):
     try:
         file = open(FilePath, 'rb')
     except IOError:
-        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Can't open local file: " + str(FilePath))
+        sys.exit(bcolors.FAIL + "[Error in MD5Checksum]: " + bcolors.ENDC + " Can't open local file: " + str(FilePath))
     else:
         m = hashlib.md5() # create new hashlib obj
         while True:
@@ -751,7 +802,7 @@ def ParsingMpstatOutput (MpstatFile,RegExp):
         try:
             file = open(MpstatFile, 'r')
         except IOError:
-            sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Can't open local file: " + str(MpstatFile))
+            sys.exit(bcolors.FAIL + "[Error in ParsingMpstatOutput]: " + bcolors.ENDC + " Can't open local file: " + str(MpstatFile))
         else:
             mpstat_out = file.readlines()
             #create new list without mpstat header
@@ -785,7 +836,7 @@ def ParsingMpstatOutput (MpstatFile,RegExp):
                 if i >= avg:
                     true_cpu_load.append(i)
     else:
-        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " can't check file: " + str(MpstatFile))
+        sys.exit(bcolors.FAIL + "[Error in ParsingMpstatOutput]: " + bcolors.ENDC + " Can't check file: " + str(MpstatFile))
     return float(sum(true_cpu_load))/float(len(true_cpu_load))
 
 def GetNumberOfProcessorsOnRemoteHost(RemoteHostIP, Port, Username, Password):
@@ -796,34 +847,46 @@ def GetNumberOfProcessorsOnRemoteHost(RemoteHostIP, Port, Username, Password):
     try:
         s.connect(RemoteHostIP, Port, Username, Password)
     except:
-        sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
+        sys.exit(bcolors.FAIL + "[Error in GetNumberOfProcessorsOnRemoteHost]: " + bcolors.ENDC + str(RemoteHostIP) + " Connecting or establishing an SSH session failed")
     else:
         stdin, stdout, stderr = s.exec_command(command_for_finding_number_of_processor)
         status = stdout.channel.recv_exit_status()
         if status != 0:
             s.close()
-            sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Can't get number of CPUs on remote host: " + str (RemoteHostIP))
+            sys.exit(bcolors.FAIL + "[Error in GetNumberOfProcessorsOnRemoteHost]: " + bcolors.ENDC + " Can't get number of CPUs on remote host: " + str (RemoteHostIP))
         number_of_processor = stdout.read().split()[0]
         if number_of_processor.isdigit():
             s.close()
             if SpeedTestParams.verbose:
-                 print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Numbers of CPU: " + str(number_of_processor) + " on remote host: " + str(RemoteHostIP)
+                 print bcolors.OKGREEN + "[Info in GetNumberOfProcessorsOnRemoteHost]: " + bcolors.ENDC + " Numbers of CPU: " + str(number_of_processor) + " on remote host: " + str(RemoteHostIP)
             return number_of_processor
         else:
             s.close()
-            sys.exit(bcolors.FAIL + "Error: " + bcolors.ENDC + " Unknown format number of CPUs on remote host: " + str (RemoteHostIP))
+            sys.exit(bcolors.FAIL + "[Error in GetNumberOfProcessorsOnRemoteHost]: " + bcolors.ENDC + " Unknown format number of CPUs on remote host: " + str (RemoteHostIP))
 
-def GetCpuListForMpstat (NumberOfCPU, ScatterCores):
+def GetCpuListForMpstat (NunCoresForScatter, NumCoresForEncrypt):
     cpu_list_without_scatter_cores = []
-    for i in range(int(NumberOfCPU)):
+    for i in range(int(NumCoresForEncrypt)):
         # exclude CPU for scatter
-        if i not in range (ScatterCores):
+        if i not in range (int(NunCoresForScatter)):
             cpu_list_without_scatter_cores.append(str(i))
     # make a list in the form of 1,2,3...
     cpu_list_for_mpstat = ','.join(cpu_list_without_scatter_cores)
     if SpeedTestParams.verbose:
-        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " CPU list for Mpstat: " + str(cpu_list_for_mpstat) + ", cores for scatter: " + str (ScatterCores)
+        print bcolors.OKGREEN + "[Info in GetCpuListForMpstat]: " + bcolors.ENDC + " CPU list for Mpstat: " + str(cpu_list_for_mpstat) + ", cores for scatter: " + \
+        str (NunCoresForScatter) + ", cores for encrypt: " + str (NumCoresForEncrypt)
     return cpu_list_for_mpstat
+
+def ChoiceCpuListForMpstatDependingOfCpuAffinity (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile, RegExp):
+    if RemoteHostIP == IpAdress.IpSite1:
+        NunCoresForScatter, NumCoresForEncrypt = GetCurrentNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile, RegExp)
+        CpuListForMpstat = GetCpuListForMpstat (NunCoresForScatter, NumCoresForEncrypt)
+        return CpuListForMpstat
+    if RemoteHostIP == IpAdress.IpSite2:
+        NunCoresForScatter, NumCoresForEncrypt = GetCurrentNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile, RegExp)
+        CpuListForMpstat = GetCpuListForMpstat (NunCoresForScatter, NumCoresForEncrypt)
+        return CpuListForMpstat
+
 
 def GetFilesFromRemoteHost (RemoteHostIP, Port, Username, Password, LocalFile, RemoteFile):
     paramiko.util.log_to_file('paramiko.log')
@@ -979,12 +1042,12 @@ def NetperfUdpTest (PacketLength, RemoteHostIP, LocalHostIP):
 def GeneralNetperfImixUdpTestWithMpstat(RemoteHostIP, Port, Username, Password, TestTime):
     #Start Mpstat
     RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (GetCpuListForMpstat(GetNumberOfProcessorsOnRemoteHost (IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password), \
-    SpeedTestParams.number_cpu_for_scatter_on_site1)), MpstatFilesClass.RemoteFileMpstatS1)
+    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
 
-    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " \
-    + str (GetCpuListForMpstat(GetNumberOfProcessorsOnRemoteHost (IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password), \
-    SpeedTestParams.number_cpu_for_scatter_on_site2)), MpstatFilesClass.RemoteFileMpstatS2)
+    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
 
     #Start Netperf test
     StopRemoteDaemon (RemoteHostIP, Port, Username, Password, 'netserver')
@@ -1016,12 +1079,13 @@ def GeneralNetperfImixUdpTestWithMpstat(RemoteHostIP, Port, Username, Password, 
 def GeneralNetperfTcpTestWithMpstat (RemoteHostIP, LocalHostIP):
     #Start Mpstat
     RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (GetCpuListForMpstat(GetNumberOfProcessorsOnRemoteHost (IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password), \
-    SpeedTestParams.number_cpu_for_scatter_on_site1)), MpstatFilesClass.RemoteFileMpstatS1)
+    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
 
-    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " \
-    + str (GetCpuListForMpstat(GetNumberOfProcessorsOnRemoteHost (IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password), \
-    SpeedTestParams.number_cpu_for_scatter_on_site2)), MpstatFilesClass.RemoteFileMpstatS2)
+    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
+
     #Start Netperf test
     MaxSpeed = NetperfTcpTest (RemoteHostIP, LocalHostIP)
     print
@@ -1046,12 +1110,13 @@ def GeneralNuttcpfUdpTestWithMpstat (PacketLength, RemoteHostIP, NumberOfIterati
     list_of_results_loss = []
     #Start Mpstat
     RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (GetCpuListForMpstat(GetNumberOfProcessorsOnRemoteHost (IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password), \
-    SpeedTestParams.number_cpu_for_scatter_on_site1)), MpstatFilesClass.RemoteFileMpstatS1)
+    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
 
-    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " \
-    + str (GetCpuListForMpstat(GetNumberOfProcessorsOnRemoteHost (IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password), \
-    SpeedTestParams.number_cpu_for_scatter_on_site2)), MpstatFilesClass.RemoteFileMpstatS2)
+    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
+
     #Start Nuttcp test
     speed, loss, max_speed_without_loss = NuttcpUdpTest(NuttcpTestParamsClass.StartMbpsForNuttcp, PacketLength, RemoteHostIP, NumberOfIterations)
     print
@@ -1086,12 +1151,13 @@ def GeneralNuttcpTcpTestWithMpstat (RemoteHostIP):
     list_of_results_speed = []
     #Start Mpstat
     RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (GetCpuListForMpstat(GetNumberOfProcessorsOnRemoteHost (IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password), \
-    SpeedTestParams.number_cpu_for_scatter_on_site1)), MpstatFilesClass.RemoteFileMpstatS1)
+    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
 
-    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " \
-    + str (GetCpuListForMpstat(GetNumberOfProcessorsOnRemoteHost (IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password), \
-    SpeedTestParams.number_cpu_for_scatter_on_site2)), MpstatFilesClass.RemoteFileMpstatS2)
+    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
+
     #Start Nuttcp test
     speed = NuttcpTcpTest(RemoteHostIP)
     print
@@ -1115,12 +1181,13 @@ def GeneralNetperfUdpTestWithMpstat (PacketLength, RemoteHostIP, LocalHostIP):
     list_of_results_loss = []
     #Start Mpstat
     RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (GetCpuListForMpstat(GetNumberOfProcessorsOnRemoteHost (IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password), \
-    SpeedTestParams.number_cpu_for_scatter_on_site1)), MpstatFilesClass.RemoteFileMpstatS1)
+    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
 
-    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " \
-    + str (GetCpuListForMpstat(GetNumberOfProcessorsOnRemoteHost (IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password), \
-    SpeedTestParams.number_cpu_for_scatter_on_site2)), MpstatFilesClass.RemoteFileMpstatS2)
+    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
+
     #Start Netperf test
     MaxSpeed, SpeedWithoutLoss = NetperfUdpTest (PacketLength, RemoteHostIP, LocalHostIP)
     print
@@ -1172,7 +1239,7 @@ def SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, User
     # chech correct of CPU affinity
     if int(NumCoreForScatter) + int(NunCoreForEncrypt) <= int(SummCoreOnRemoSterraGate):
         if SpeedTestParams.verbose:
-            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Check of CPU affinity was successful on remote host: " + str (RemoteHostIP)
+            print bcolors.OKGREEN + "[Info in SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate]: " + bcolors.ENDC + " Check of CPU affinity was successful on remote host: " + str (RemoteHostIP)
         # get remote vpndrvr.conf file
         GetFilesFromRemoteHost( RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile)
         # read local vpndrvr.conf file
@@ -1184,17 +1251,17 @@ def SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, User
                 NumScatterCoresBeforeReplacment = RegExp.match(line).group(1) # get core for scatter before replacment
                 NumEncryptCoresBeforeReplacment = RegExp.match(line).group(2) # get core for encrypt before replacment
                 if SpeedTestParams.verbose:
-                    print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " CPU affinity on remote host: " + str(RemoteHostIP) + " before replacement: options vpndrvr cpu_distribution=\"*:" + \
+                    print bcolors.OKGREEN + "[Info in SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate]: " + bcolors.ENDC + " CPU affinity on remote host: " + str(RemoteHostIP) + " before replacement: options vpndrvr cpu_distribution=\"*:" + \
                     str(NumScatterCoresBeforeReplacment) + "/" +  str(NumEncryptCoresBeforeReplacment) + "\""
         if not CpuDistributionOnRemoteSterraGate: # if CPU affinity didn't set on remote host
             if SpeedTestParams.verbose:
-                print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " CPU affinity on remote host: " + str(RemoteHostIP) + " didn't set before change"
+                print bcolors.OKGREEN + "[Info in SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate]: " + bcolors.ENDC + " CPU affinity on remote host: " + str(RemoteHostIP) + " didn't set before change"
             file = open(LocalVpndrvrFile, 'a+') # append to end
             file.writelines("options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\"\n")
             file.close()
             PutLocalFileToRemoteHost (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile)
             if SpeedTestParams.verbose:
-                print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " New CPU affinity write on local file: " + str (LocalVpndrvrFile) + \
+                print bcolors.OKGREEN + "[Info in SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate]: " + bcolors.ENDC + " New CPU affinity write on local file: " + str (LocalVpndrvrFile) + \
                 ", current CPU affinity: options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\""
             os.remove(LocalVpndrvrFile)
             RestartRemoteSterraGate (RemoteHostIP, Port, Username, Password)
@@ -1202,7 +1269,7 @@ def SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, User
             if CpuDistributionOnRemoteSterraGate:
                 # if current affinity are same with what you want  - do nothing
                 if (int(NumScatterCoresBeforeReplacment) == int(NumCoreForScatter) ) and (int (NumEncryptCoresBeforeReplacment) == int(NunCoreForEncrypt)):
-                    print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " CPU affinity don't change, on host: " + str(RemoteHostIP) + " because current affinity are same with what you want"
+                    print bcolors.OKGREEN + "[Info in SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate]: " + bcolors.ENDC + " CPU affinity don't change, on host: " + str(RemoteHostIP) + ", because current affinity are same with what you want"
                     file.close()
                     os.remove(LocalVpndrvrFile)
                     RestartRemoteSterraGate (RemoteHostIP, Port, Username, Password)
@@ -1216,14 +1283,40 @@ def SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, User
                             file.writelines("options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\"\n")
                     file.close()
                     if SpeedTestParams.verbose:
-                        print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " New CPU affinity write on local file: " + str (LocalVpndrvrFile) + \
+                        print bcolors.OKGREEN + "[Info in SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate]: " + bcolors.ENDC + " New CPU affinity write on local file: " + str (LocalVpndrvrFile) + \
                         ", current CPU affinity: options vpndrvr cpu_distribution=\"*:" + str(NumCoreForScatter)+ "/" +  str(NunCoreForEncrypt) + "\""
                     # copy local vpndrvr.conf file to remote host
                     PutLocalFileToRemoteHost (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile)
                     os.remove(LocalVpndrvrFile)
                     RestartRemoteSterraGate (RemoteHostIP, Port, Username, Password)
     else:
-        sys.exit(bcolors.FAIL + "Error:" + bcolors.ENDC + " Check of CPU affinity was fail on remote host: " + str(RemoteHostIP) + " because Cores for scatter + Cores for encrypt > Number of Cores on host")
+        sys.exit(bcolors.FAIL + "[Error in SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate]:" + bcolors.ENDC + " Check of CPU affinity was fail on remote host: " + str(RemoteHostIP) + ", because cores for scatter + cores for encrypt > number of cores on host")
+
+def GetCurrentNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile, RegExp):
+    CpuDistributionOnRemoteSterraGate = False
+    # get remote vpndrvr.conf file
+    GetFilesFromRemoteHost( RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile)
+    # read local vpndrvr.conf file
+    file = open(LocalVpndrvrFile, 'r')
+    vpndrvr_conf = file.readlines()
+    for line in vpndrvr_conf: # see all line in local vpndrvr.conf file
+        if RegExp.match(line):
+            CpuDistributionOnRemoteSterraGate = True # set CpuDistributionOnRemoteSterraGate = True if CPU affinity did set on remote host before
+            CurrentNumScatterCores = RegExp.match(line).group(1) # get current cores for scatter
+            CurrenNumEncryptCores = RegExp.match(line).group(2) # get current cores for encrypt
+            if SpeedTestParams.verbose:
+                print bcolors.OKGREEN + "[Info in GetCurrentNumOfCoreForScatterAndEncryptOnRemoteSterraGate]: " + bcolors.ENDC + " CPU affinity on remote host: " + str(RemoteHostIP) + ", affinity: options vpndrvr cpu_distribution=\"*:" + \
+                str(CurrentNumScatterCores) + "/" +  str(CurrenNumEncryptCores) + "\""
+            file.close()
+            os.remove(LocalVpndrvrFile)
+            return CurrentNumScatterCores, CurrenNumEncryptCores
+    if not CpuDistributionOnRemoteSterraGate: # if CPU affinity didn't set on remote host
+        if SpeedTestParams.verbose:
+            print bcolors.OKGREEN + "[Info in GetCurrentNumOfCoreForScatterAndEncryptOnRemoteSterraGate]: " + bcolors.ENDC + " CPU affinity on remote host: " + str(RemoteHostIP) + " didn't set"
+        file.close()
+        os.remove(LocalVpndrvrFile)
+        return 1, int(GetNumberOfProcessorsOnRemoteHost(RemoteHostIP, Port, Username, Password)) - 1
+
 
 def ChoseTest ():
     if (SpeedTestParams.encrypt_alg == 'C') and (SpeedTestParams.traf_gen == 'netperf'):
@@ -1350,31 +1443,34 @@ try:
     SpeedTestParams = SpeedTestParamsClass ()
     # parse parametrs of script
     ParsingParametrsOfScript ()
-    # print summary table
-    PrintSummaryOfTest ()
     # ping test
     if PingTest(IpAdress.GetIpList()) == 0:
         if SpeedTestParams.verbose:
-            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Network test complete successfully"
+            print bcolors.OKGREEN + "[Info in Main]: " + bcolors.ENDC + " Network test complete successfully"
     # chech installed soft
     CheckAllNecessarySoftForTest ()
     # set CPU affinity
-    if SpeedTestParams.cpu_aff_on_site1 != False:
+    if SpeedTestParams.cpu_aff_on_site1:
         SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, \
         VpndrvrFilesClass.LocalVpndrvrFile, VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp, SpeedTestParams.number_cpu_for_scatter_on_site1, \
         SpeedTestParams.number_cpu_for_encrypt_on_site1, GetNumberOfProcessorsOnRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password))
-    if SpeedTestParams.cpu_aff_on_site2 != False:
+    if SpeedTestParams.cpu_aff_on_site2:
         SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, \
         VpndrvrFilesClass.LocalVpndrvrFile, VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp, SpeedTestParams.number_cpu_for_scatter_on_site2, \
         SpeedTestParams.number_cpu_for_encrypt_on_site2, GetNumberOfProcessorsOnRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password))
-
+    # sync time
+    if SpeedTestParams.time_sync_on_sites:
+        SetTimeOnRemoteHostAsLocalHost (IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password)
+        SetTimeOnRemoteHostAsLocalHost (IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password)
+    # print summary table
+    PrintSummaryOfTest ()
     # copy local LSP to Sites if encryp alg not NOLSP
     if SpeedTestParams.encrypt_alg != 'NOLSP' :
         PutLocalLspToRemoteHost (IpAdress.IpSite1, IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password)
     else:
         if SpeedTestParams.verbose:
-            print bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Chose NOLSP test"
+            print bcolors.OKGREEN + "[Info in Main]: " + bcolors.ENDC + " Chose NOLSP test"
     # chose test
     ChoseTest ()
 except KeyboardInterrupt:
-    sys.exit(bcolors.OKGREEN + "Info: " + bcolors.ENDC + " Test was stopped")
+    sys.exit(bcolors.OKGREEN + "[Info in Main]: " + bcolors.ENDC + " Test was stopped")
