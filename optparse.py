@@ -7,6 +7,53 @@ import re
 import warnings
 import optparse
 import subprocess as sp
+import locale
+locale.setlocale(locale.LC_NUMERIC, "")
+
+def format_num(num):
+    """Format a number according to given places.
+    Adds commas, etc. Will truncate floats into ints!"""
+
+    try:
+        inum = int(num)
+        return locale.format("%.*f", (0, inum), True)
+
+    except (ValueError, TypeError):
+        return str(num)
+
+def get_max_width(table, index):
+    """Get the maximum width of the given column index"""
+
+    return max([len(format_num(row[index])) for row in table])
+
+def pprint_table(out, table):
+    """Prints out a table of data, padded for alignment
+    @param out: Output stream (file-like object)
+    @param table: The table to print. A list of lists.
+    Each row must have the same number of columns. """
+
+    col_paddings = []
+
+    for i in range(len(table[0])):
+        col_paddings.append(get_max_width(table, i))
+
+    for row in table:
+        # left col
+        print >> out, row[0].ljust(col_paddings[0] + 1),
+        # rest of the cols
+        for i in range(1, len(row)):
+            col = format_num(row[i]).rjust(col_paddings[i] + 2)
+            print >> out, col,
+        print >> out
+
+class SummTables:
+    table_with_cpu_load = [["", "Mbps", "CPU load on Site 1", "CPU load on Site 2"],
+        ["UDP1400", 0.0, 0.0, 0.0],
+        ["UDP1000", 0.0, 0.0, 0.0],
+        ["UDP512", 0.0, 0.0, 0.0],
+        ["UDP64", 0.0, 0.0, 0.0],
+        ["TCP", 0.0, 0.0, 0.0],
+        ["IMIX", 0.0, 0.0, 0.0]]
 
 class bcolors:
     HEADER = '\033[95m'
@@ -108,7 +155,7 @@ class SpeedTestParamsClass:
     number_cpu_for_encrypt_on_site1 = 1
     number_cpu_for_scatter_on_site2 = 1
     number_cpu_for_encrypt_on_site2 = 1
-    check = False
+    cpu_stat = False
     verbose = False
     def SetNumberCpuForScatterOnSite1 (self, num):
         self.cpu_aff_on_site1 = True
@@ -135,7 +182,7 @@ parser.add_option('--iterations', help='Test iterations. A default value [%defau
 parser.add_option('--time_sync_on_sites', help='Time syncr on two IPsec Sites. A default value [%default]', dest='time_sync_on_sites', default=False, action='store_true')
 parser.add_option('--cpu_aff_on_site1', help='Set CPU affinity on first IPsec Site. A default value [%default]', dest='cpu_aff_on_site1', default=False, action='store', metavar='{{num cores for scatter} {num cores for encrypt}}', nargs=2, type='int')
 parser.add_option('--cpu_aff_on_site2', help='Set CPU affinity on second IPsec Site. A default value [%default]', dest='cpu_aff_on_site2', default=False, action='store', metavar='{{int},{int}}', nargs=2, type='int')
-#parser.add_option('--check', help='Check all necessary soft and files for test . A default value [%default]', dest='check', default=False, action='store_true')
+parser.add_option('--cpu_stat', help='Show CPU load on IPsec Sites. A default value [%default]', dest='cpu_stat', default=False, action='store_true')
 parser.add_option('--verbose', help='More information during the test. A default value [%default]', dest='verbose', default=False, action='store_true')
 (opts, args) = parser.parse_args()
 
@@ -249,18 +296,6 @@ def RestartRemoteSterraGate (RemoteHostIP, Port, Username, Password):
             if SpeedTestParams.verbose:
                 print bcolors.OKGREEN + "[Info in RestartRemoteSterraGate]: " + bcolors.ENDC + " S-Terra Gate on host: " + str (RemoteHostIP) + " successful restart"
         s.close()
-
-##def RestartRemoteSterraGate (RemoteHostIP, Port, Username, Password):
-##    StopRemoteDaemonThroughInitd (RemoteHostIP, Port, Username, Password, 'vpngate')
-##    time.sleep(1)
-##    StopRemoteDaemonThroughInitd (RemoteHostIP, Port, Username, Password, 'vpndrv')
-##    time.sleep(1)
-##    StartRemoteDaemonThroughInitd(RemoteHostIP, Port, Username, Password, 'vpndrv')
-##    time.sleep(1)
-##    StartRemoteDaemonThroughInitd(RemoteHostIP, Port, Username, Password, 'vpngate')
-##    if SpeedTestParams.verbose:
-##        print bcolors.OKGREEN + "[Info in RestartRemoteSterraGate]: " + bcolors.ENDC + " S-Terra Gate: " + str (RemoteHostIP) + " successful restart"
-
 
 def CheckStartrLocalDaemon (DaemonName):
     # if return status is 0 - local daemon is now running
@@ -565,9 +600,14 @@ def ParsingParametrsOfScript ():
             sys.exit()
     # check time syncr
     if not opts.time_sync_on_sites:
-        SpeedTestParams.time_sync_on_sites = False
+        SpeedTestParams.time_sync_on_sites = opts.time_sync_on_sites
     else:
         SpeedTestParams.time_sync_on_sites = opts.time_sync_on_sites
+    # check CPU stat
+    if not opts.cpu_stat:
+        SpeedTestParams.cpu_stat = opts.cpu_stat
+    else:
+        SpeedTestParams.cpu_stat = opts.cpu_stat
     # check verbose
     if not opts.verbose:
         SpeedTestParams.verbose = False
@@ -600,16 +640,17 @@ def PrintSummaryOfTest ():
     print 'Traffic generator:               ', SpeedTestParams.traf_gen
     print 'Time sync on sites:              ', SpeedTestParams.time_sync_on_sites
     if SpeedTestParams.time_sync_on_sites:
-        print "     Current time on Site 1: ", GetTimeFromRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password)
-        print "     Current time on Site 2: ", GetTimeFromRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password)
+        print "     Current time on Site 1: ", (GetTimeFromRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password)).strip()
+        print "     Current time on Site 2: ", (GetTimeFromRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password)).strip()
     print 'CPU aff. on Site 1:              ', SpeedTestParams.cpu_aff_on_site1
     if SpeedTestParams.cpu_aff_on_site1 == True:
-        print '     Num. Cores for scatter on Site 1: ', SpeedTestParams.number_cpu_for_scatter_on_site1
-        print '     Num. Cores for encrypt on Site 1: ', SpeedTestParams.number_cpu_for_encrypt_on_site1
+        print '     Num. Cores for scatter: ', SpeedTestParams.number_cpu_for_scatter_on_site1
+        print '     Num. Cores for encrypt: ', SpeedTestParams.number_cpu_for_encrypt_on_site1
     print 'CPU aff. on Site 2:              ', SpeedTestParams.cpu_aff_on_site2
     if SpeedTestParams.cpu_aff_on_site2 == True:
-        print '     Num. Cores for scatter on Site 2: ', SpeedTestParams.number_cpu_for_scatter_on_site2
-        print '     Num. Cores for encrypt on Site 2: ', SpeedTestParams.number_cpu_for_encrypt_on_site2
+        print '     Num. Cores for scatter: ', SpeedTestParams.number_cpu_for_scatter_on_site2
+        print '     Num. Cores for encrypt: ', SpeedTestParams.number_cpu_for_encrypt_on_site2
+    print 'Show CPU load on IPsec Sites:    ', SpeedTestParams.cpu_stat
     print 'Number of iterations:            ', SpeedTestParams.iterations
     print 'Verbose:                         ', SpeedTestParams.verbose
 
@@ -643,24 +684,27 @@ def CheckInstallProgramOnRemoteHost(RemoteHostIP, Port, Username, Password, Prog
     stdin, stdout, stderr = s.exec_command(check_install_program)
     status = stdout.channel.recv_exit_status()
     if status == 0:
+        s.close()
         return status
     else:
         s.close()
         return status
 
 def CheckAllNecessarySoftForTest ():
-    if CheckInstallProgramOnRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat') != 0:
-        sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Mpstat not installed on the remote host: " + str(IpAdress.IpSite1))
-    if CheckInstallProgramOnRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat') != 0:
-        sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Mpstat not installed on the remote host: " + str(IpAdress.IpSite2))
+    if SpeedTestParams.cpu_stat:
+        if CheckInstallProgramOnRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat') != 0:
+            sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Mpstat not installed on the remote host: " + str(IpAdress.IpSite1))
+        if CheckInstallProgramOnRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat') != 0:
+            sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Mpstat not installed on the remote host: " + str(IpAdress.IpSite2))
     if CheckInstallProgramOnRemoteHost(IpAdress.IpRemote, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'netperf') != 0:
         sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Netperf not installed on the remote host: " + str(IpAdress.IpRemote))
     if CheckInstallProgramOnRemoteHost(IpAdress.IpLocal, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'netperf') != 0:
         sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Netperf not installed on the remote host: " + str(IpAdress.IpLocal))
-    if CheckInstallProgramOnRemoteHost(IpAdress.IpRemote, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'nuttcp') != 0:
-        sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Nuttcp not installed on the remote host: " + str(IpAdress.IpRemote))
-    if CheckInstallProgramOnRemoteHost(IpAdress.IpLocal, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'nuttcp') != 0:
-        sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Nuttcp not installed on the remote host: " + str(IpAdress.IpLocal))
+    if SpeedTestParams.traf_gen in ('nuttcp', 'ALL'):
+        if CheckInstallProgramOnRemoteHost(IpAdress.IpRemote, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'nuttcp') != 0:
+            sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Nuttcp not installed on the remote host: " + str(IpAdress.IpRemote))
+        if CheckInstallProgramOnRemoteHost(IpAdress.IpLocal, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'nuttcp') != 0:
+            sys.exit(bcolors.FAIL + "[Error in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " Nuttcp not installed on the remote host: " + str(IpAdress.IpLocal))
     if SpeedTestParams.verbose:
         print bcolors.OKGREEN + "[Info in CheckAllNecessarySoftForTest]: " + bcolors.ENDC + " All necessary soft installed"
 
@@ -920,7 +964,7 @@ def NetperfTcpTest (RemoteHostIP, LocalHostIP):
     return throughput_without_loss
 
 def NetperfImixUdpTest(RemHostIP, TestTime):
-    Sum = 0
+    Sum = 0.0
     start_imix_test = "netperf -H " + str(RemHostIP) + " -t UDP_STREAM -v 1 -P 0 -p 5001 -l " + str(TestTime) + " -- -m 512 & " \
     + "netperf -H " + str(RemHostIP) + " -t UDP_STREAM -v 1 -P 0 -p 5002 -l " + str(TestTime) + " -- -m 1400 & " \
     + "netperf -H " + str(RemHostIP) + " -t UDP_STREAM -v 1 -P 0 -p 5003 -l " + str(TestTime) + " -- -m 64 & " \
@@ -943,7 +987,7 @@ def NetperfImixUdpTest(RemHostIP, TestTime):
                     print "PacketLength: ", PacketLength , "Throughput max 10^6bits/sec: ", line.strip().split()[-1]
 
     print "Sum: ", Sum
-    return status
+    return float(Sum)
 
 def NuttcpUdpTest (Mbps, PacketLength, RemoteHostIP, NumberOfIterations):
     IPlist = []
@@ -1041,99 +1085,102 @@ def NetperfUdpTest (PacketLength, RemoteHostIP, LocalHostIP):
 
 def GeneralNetperfImixUdpTestWithMpstat(RemoteHostIP, Port, Username, Password, TestTime):
     #Start Mpstat
-    RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
-    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
-
-    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
-    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
+    if SpeedTestParams.cpu_stat:
+        RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+        str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+        VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
+        RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+        str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+        VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
 
     #Start Netperf test
     StopRemoteDaemon (RemoteHostIP, Port, Username, Password, 'netserver')
-    time.sleep(0.5)
+    time.sleep(0.2)
     StartAnotherInstanceOfDaemonOnRemoteHostWithAdditionalParams (RemoteHostIP, Port, Username, Password, 'netserver', '-p 5001')
-    time.sleep(0.5)
+    time.sleep(0.2)
     StartAnotherInstanceOfDaemonOnRemoteHostWithAdditionalParams (RemoteHostIP, Port, Username, Password, 'netserver', '-p 5002')
-    time.sleep(0.5)
+    time.sleep(0.2)
     StartAnotherInstanceOfDaemonOnRemoteHostWithAdditionalParams (RemoteHostIP, Port, Username, Password, 'netserver', '-p 5003')
-    time.sleep(0.5)
-    print
+    time.sleep(0.2)
     print bcolors.HEADER + "Netperf IMIX UDP test with Mpstat " + bcolors.ENDC
-    NetperfImixUdpTest (RemoteHostIP, TestTime)
-    time.sleep(0.5)
-    #Stop Mmstat
-    StopRemoteDaemon(IpAdress.IpSite1, Port, Username, Password, 'mpstat')
-    StopRemoteDaemon(IpAdress.IpSite2, Port, Username, Password, 'mpstat')
-    #Get Mpstat files
-    GetFilesFromRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS1, MpstatFilesClass.RemoteFileMpstatS1)
-    GetFilesFromRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS2, MpstatFilesClass.RemoteFileMpstatS2)
-    #Parse CPU load
-    cpu_load_on_site1 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS1, mpstat_header_regexp)
-    cpu_load_on_site2 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS2, mpstat_header_regexp)
-    print '{0:.0f}% CPU load on first Site, IP: {1}'.format(cpu_load_on_site1, IpAdress.IpSite1)
-    print '{0:.0f}% CPU load on second Site, IP: {1} '.format(cpu_load_on_site2, IpAdress.IpSite2)
+    SummTables.table_with_cpu_load[6][1] = NetperfImixUdpTest (RemoteHostIP, TestTime)
+    if SpeedTestParams.cpu_stat:
+        #Stop Mmstat
+        StopRemoteDaemon(IpAdress.IpSite1, Port, Username, Password, 'mpstat')
+        StopRemoteDaemon(IpAdress.IpSite2, Port, Username, Password, 'mpstat')
+        #Get Mpstat files
+        GetFilesFromRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS1, MpstatFilesClass.RemoteFileMpstatS1)
+        GetFilesFromRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS2, MpstatFilesClass.RemoteFileMpstatS2)
+        #Parse CPU load
+        cpu_load_on_site1 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS1, mpstat_header_regexp)
+        SummTables.table_with_cpu_load[6][2] = round(cpu_load_on_site1)
+        cpu_load_on_site2 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS2, mpstat_header_regexp)
+        SummTables.table_with_cpu_load[6][3] = round(cpu_load_on_site2)
+        print '{0:.0f}% CPU load on first Site, IP: {1}'.format(cpu_load_on_site1, IpAdress.IpSite1)
+        print '{0:.0f}% CPU load on second Site, IP: {1} '.format(cpu_load_on_site2, IpAdress.IpSite2)
     print
     RestartRemoteDaemon (RemoteHostIP, Port, Username, Password, 'netserver')
 
 def GeneralNetperfTcpTestWithMpstat (RemoteHostIP, LocalHostIP):
     #Start Mpstat
-    RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
-    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
-
-    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
-    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
-
+    if SpeedTestParams.cpu_stat:
+        RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+        str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+        VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
+        RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+        str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+        VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
     #Start Netperf test
     MaxSpeed = NetperfTcpTest (RemoteHostIP, LocalHostIP)
-    print
     print bcolors.HEADER + "Netperf TCP test with Mpstat " + bcolors.ENDC
     print MaxSpeed, "Throughput generated on local host, 10^6bits/sec"
-    #Stop Mmstat
-    StopRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
-    StopRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
-    #Get Mpstat files
-    GetFilesFromRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS1, MpstatFilesClass.RemoteFileMpstatS1)
-    GetFilesFromRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS2, MpstatFilesClass.RemoteFileMpstatS2)
-    #Parse CPU load
-    cpu_load_on_site1 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS1, mpstat_header_regexp)
-    cpu_load_on_site2 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS2, mpstat_header_regexp)
-    print '{0:.0f}% CPU load on first Site, IP: {1}'.format(cpu_load_on_site1, IpAdress.IpSite1)
-    print '{0:.0f}% CPU load on second Site, IP: {1} '.format(cpu_load_on_site2, IpAdress.IpSite2)
+    SummTables.table_with_cpu_load[5][1] = MaxSpeed
+    if SpeedTestParams.cpu_stat:
+        #Stop Mmstat
+        StopRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
+        StopRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
+        #Get Mpstat files
+        GetFilesFromRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS1, MpstatFilesClass.RemoteFileMpstatS1)
+        GetFilesFromRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS2, MpstatFilesClass.RemoteFileMpstatS2)
+        #Parse CPU load
+        cpu_load_on_site1 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS1, mpstat_header_regexp)
+        SummTables.table_with_cpu_load[5][2] = round(cpu_load_on_site1)
+        cpu_load_on_site2 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS2, mpstat_header_regexp)
+        SummTables.table_with_cpu_load[5][3] = round(cpu_load_on_site2)
+        print '{0:.0f}% CPU load on first Site, IP: {1}'.format(cpu_load_on_site1, IpAdress.IpSite1)
+        print '{0:.0f}% CPU load on second Site, IP: {1} '.format(cpu_load_on_site2, IpAdress.IpSite2)
     print
-    time.sleep(1)
+    time.sleep(0.5)
 
 def GeneralNuttcpfUdpTestWithMpstat (PacketLength, RemoteHostIP, NumberOfIterations):
     list_of_results_speed = []
     list_of_results_loss = []
     #Start Mpstat
-    RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
-    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
-
-    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
-    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
-
+    if SpeedTestParams.cpu_stat:
+        RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+        str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+        VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
+        RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+        str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+        VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
     #Start Nuttcp test
     speed, loss, max_speed_without_loss = NuttcpUdpTest(NuttcpTestParamsClass.StartMbpsForNuttcp, PacketLength, RemoteHostIP, NumberOfIterations)
-    print
     print bcolors.HEADER + "Nuttcp UDP test with Mpstat, PacketLength is " + str(PacketLength) + bcolors.ENDC
     print speed, "Throughput"
     print loss, "Loss"
+    print
+    if SpeedTestParams.cpu_stat:
     #Stop Mmstat
-    StopRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
-    StopRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
-    #Get Mpstat files
-    GetFilesFromRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS1, MpstatFilesClass.RemoteFileMpstatS1)
-    GetFilesFromRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS2, MpstatFilesClass.RemoteFileMpstatS2)
-    #Parse CPU load
-    cpu_load_on_site1 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS1, mpstat_header_regexp)
-    cpu_load_on_site2 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS2, mpstat_header_regexp)
-    print '{0:.0f}% CPU load on first Site, IP: {1}'.format(cpu_load_on_site1, IpAdress.IpSite1)
-    print '{0:.0f}% CPU load on second Site, IP: {1} '.format(cpu_load_on_site2, IpAdress.IpSite2)
+        StopRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
+        StopRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
+        #Get Mpstat files
+        GetFilesFromRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS1, MpstatFilesClass.RemoteFileMpstatS1)
+        GetFilesFromRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS2, MpstatFilesClass.RemoteFileMpstatS2)
+        #Parse CPU load
+        cpu_load_on_site1 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS1, mpstat_header_regexp)
+        cpu_load_on_site2 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS2, mpstat_header_regexp)
+        print '{0:.0f}% CPU load on first Site, IP: {1}'.format(cpu_load_on_site1, IpAdress.IpSite1)
+        print '{0:.0f}% CPU load on second Site, IP: {1} '.format(cpu_load_on_site2, IpAdress.IpSite2)
     print
     print "Nuttcp UDP test on repeatability of results"
     for i in range(5):
@@ -1144,67 +1191,87 @@ def GeneralNuttcpfUdpTestWithMpstat (PacketLength, RemoteHostIP, NumberOfIterati
         print loss, "Loss"
         list_of_results_speed.append(speed)
         list_of_results_loss.append(loss)
-    time.sleep(1)
+    time.sleep(0.5)
     return list_of_results_speed, list_of_results_loss
 
 def GeneralNuttcpTcpTestWithMpstat (RemoteHostIP):
     list_of_results_speed = []
     #Start Mpstat
-    RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
-    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
-
-    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
-    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
-
+    if SpeedTestParams.cpu_stat:
+        RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+        str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+        VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
+        RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+        str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+        VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
     #Start Nuttcp test
     speed = NuttcpTcpTest(RemoteHostIP)
-    print
     print bcolors.HEADER + "Nuttcp TCP test with Mpstat " + bcolors.ENDC
     print speed, "Throughput without loss"
-    #Stop Mmstat
-    StopRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
-    StopRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
-    #Get Mpstat files
-    GetFilesFromRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS1, MpstatFilesClass.RemoteFileMpstatS1)
-    GetFilesFromRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS2, MpstatFilesClass.RemoteFileMpstatS2)
-    #Parse CPU load
-    cpu_load_on_site1 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS1, mpstat_header_regexp)
-    cpu_load_on_site2 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS2, mpstat_header_regexp)
-    print '{0:.0f}% CPU load on first Site, IP: {1}'.format(cpu_load_on_site1, IpAdress.IpSite1)
-    print '{0:.0f}% CPU load on second Site, IP: {1} '.format(cpu_load_on_site2, IpAdress.IpSite2)
+    if SpeedTestParams.cpu_stat:
+        #Stop Mmstat
+        StopRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
+        StopRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
+        #Get Mpstat files
+        GetFilesFromRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS1, MpstatFilesClass.RemoteFileMpstatS1)
+        GetFilesFromRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS2, MpstatFilesClass.RemoteFileMpstatS2)
+        #Parse CPU load
+        cpu_load_on_site1 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS1, mpstat_header_regexp)
+        cpu_load_on_site2 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS2, mpstat_header_regexp)
+        print '{0:.0f}% CPU load on first Site, IP: {1}'.format(cpu_load_on_site1, IpAdress.IpSite1)
+        print '{0:.0f}% CPU load on second Site, IP: {1} '.format(cpu_load_on_site2, IpAdress.IpSite2)
     print
 
 def GeneralNetperfUdpTestWithMpstat (PacketLength, RemoteHostIP, LocalHostIP):
     list_of_results_speed = []
     list_of_results_loss = []
     #Start Mpstat
-    RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
-    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
-
-    RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
-    str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
-    VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
-
+    if SpeedTestParams.cpu_stat:
+        RestartRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+        str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+        VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS1)
+        RestartRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat', "3 -P " + \
+        str (ChoiceCpuListForMpstatDependingOfCpuAffinity(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, VpndrvrFilesClass.LocalVpndrvrFile,\
+        VpndrvrFilesClass.RemoteVpndrvrFile, vpndrvr_cpu_distribution_regexp)), MpstatFilesClass.RemoteFileMpstatS2)
     #Start Netperf test
     MaxSpeed, SpeedWithoutLoss = NetperfUdpTest (PacketLength, RemoteHostIP, LocalHostIP)
-    print
     print bcolors.HEADER + "Netperf UDP test with Mpstat, PacketLength is " + str(PacketLength) + bcolors.ENDC
     print MaxSpeed, "Throughput generated on local host, 10^6bits/sec"
     print SpeedWithoutLoss, "Throughput without loss, 10^6bits/sec"
-    #Stop Mmstat
-    StopRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
-    StopRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
-    #Get Mpstat files
-    GetFilesFromRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS1, MpstatFilesClass.RemoteFileMpstatS1)
-    GetFilesFromRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS2, MpstatFilesClass.RemoteFileMpstatS2)
-    #Parse CPU load
-    cpu_load_on_site1 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS1, mpstat_header_regexp)
-    cpu_load_on_site2 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS2, mpstat_header_regexp)
-    print '{0:.0f}% CPU load on first Site, IP: {1}'.format(cpu_load_on_site1, IpAdress.IpSite1)
-    print '{0:.0f}% CPU load on second Site, IP: {1} '.format(cpu_load_on_site2, IpAdress.IpSite2)
+
+    if PacketLength == 1400:
+        SummTables.table_with_cpu_load[1][1] = SpeedWithoutLoss
+    if PacketLength == 1000:
+        SummTables.table_with_cpu_load[2][1] = SpeedWithoutLoss
+    if PacketLength == 512:
+        SummTables.table_with_cpu_load[3][1] = SpeedWithoutLoss
+    if PacketLength == 64:
+        SummTables.table_with_cpu_load[4][1] = SpeedWithoutLoss
+
+    if SpeedTestParams.cpu_stat:
+        #Stop Mmstat
+        StopRemoteDaemon(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
+        StopRemoteDaemon(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, 'mpstat')
+        #Get Mpstat files
+        GetFilesFromRemoteHost(IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS1, MpstatFilesClass.RemoteFileMpstatS1)
+        GetFilesFromRemoteHost(IpAdress.IpSite2, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, MpstatFilesClass.LocalFileMpstatS2, MpstatFilesClass.RemoteFileMpstatS2)
+        #Parse CPU load
+        cpu_load_on_site1 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS1, mpstat_header_regexp)
+        cpu_load_on_site2 = ParsingMpstatOutput(MpstatFilesClass.LocalFileMpstatS2, mpstat_header_regexp)
+        if PacketLength == 1400:
+            SummTables.table_with_cpu_load[1][2] = round(cpu_load_on_site1)
+            SummTables.table_with_cpu_load[1][3] = round(cpu_load_on_site2)
+        if PacketLength == 1000:
+            SummTables.table_with_cpu_load[2][2] = round(cpu_load_on_site1)
+            SummTables.table_with_cpu_load[2][3] = round(cpu_load_on_site2)
+        if PacketLength == 512:
+            SummTables.table_with_cpu_load[3][2] = round(cpu_load_on_site1)
+            SummTables.table_with_cpu_load[3][3] = round(cpu_load_on_site2)
+        if PacketLength == 64:
+            SummTables.table_with_cpu_load[4][2] = round(cpu_load_on_site1)
+            SummTables.table_with_cpu_load[4][3] = round(cpu_load_on_site2)
+        print '{0:.0f}% CPU load on first Site, IP: {1}'.format(cpu_load_on_site1, IpAdress.IpSite1)
+        print '{0:.0f}% CPU load on second Site, IP: {1} '.format(cpu_load_on_site2, IpAdress.IpSite2)
     print
     time.sleep(1)
 
@@ -1233,6 +1300,8 @@ def FullNetperfTestWithMpstat ():
         GeneralNetperfUdpTestWithMpstat (NetperfTestParamsClass.UDP64, IpAdress.IpRemote, IpAdress.IpLocal)
         GeneralNetperfTcpTestWithMpstat (IpAdress.IpRemote, IpAdress.IpLocal)
         GeneralNetperfImixUdpTestWithMpstat(IpAdress.IpRemote, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, NetperfTestParamsClass.TimeForImixTest)
+        out = sys.stdout
+        pprint_table(out, SummTables.table_with_cpu_load)
 
 def SetNumOfCoreForScatterAndEncryptOnRemoteSterraGate (RemoteHostIP, Port, Username, Password, LocalVpndrvrFile, RemoteVpndrvrFile, RegExp, NumCoreForScatter, NunCoreForEncrypt, SummCoreOnRemoSterraGate):
     CpuDistributionOnRemoteSterraGate = False
@@ -1354,18 +1423,21 @@ def ChoseTest ():
 def FullNetperfTestWithMpstat_C ():
         print bcolors.HEADER + "**********Start test CIPHER with Netperf (Mpstat)**********" + bcolors.ENDC
         ChangeLspOnRemoteSterraGate (IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, LspFilesClass.first_site_lsp_C)
+        SummTables.table_with_cpu_load[0][0] = "Netperf, Cipher"
         FullNetperfTestWithMpstat()
         print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
 def FullNetperfTestWithMpstat_CI ():
         print bcolors.HEADER + "**********Start test CIPHER and INTEGRITY with Netperf (Mpstat)**********" + bcolors.ENDC
         ChangeLspOnRemoteSterraGate (IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, LspFilesClass.first_site_lsp_CI)
+        SummTables.table_with_cpu_load[0][0] = "Netperf, Cipher and Int"
         FullNetperfTestWithMpstat()
         print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
 def FullNetperfTestWithMpstat_IMIT ():
         print bcolors.HEADER + "**********Start test IMIT with Netperf (Mpstat)**********" + bcolors.ENDC
         ChangeLspOnRemoteSterraGate (IpAdress.IpSite1, SshConParamsClass.port, SshConParamsClass.username, SshConParamsClass.password, LspFilesClass.first_site_lsp_IMIT)
+        SummTables.table_with_cpu_load[0][0] = "Netperf, Imit"
         FullNetperfTestWithMpstat()
         print bcolors.HEADER + "****************************************************************" + bcolors.ENDC
 
