@@ -1,1 +1,1 @@
-netperf and nuttcp wrapper
+scripts for automatisation
