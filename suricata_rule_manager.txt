@@ -1,0 +1,116 @@
+#!/bin/bash
+#SID=2522800
+
+ACTIONWITHRULE=$1
+SID=$2
+PATHFORULES=/etc/suricata/rules/
+PATHOFCONFIGIONKMASTER=/etc/oinkmaster.conf
+
+if [[ $3 == reload ]];
+then
+    RELOAD=0
+else 
+    RELOAD=1
+fi
+
+if [[ $# < 2 ]];
+then
+    echo "Suricata rules manager"
+    echo "Use: {enable | disable} {SID} [reload]"
+    exit 1
+fi
+
+if [[ -w ${PATHFORULES} ]];
+then
+    echo > /dev/null
+else 
+    echo "Error: path ${PATHFORULES} does not exists or you don't have permissions"
+    exit 1    
+fi
+
+which oinkmaster > /dev/null
+RESULT=$?
+
+if [[ ${RESULT} == 0 ]];
+then
+    echo > /dev/null
+else 
+    echo "Error: oinkmaster does not install"
+    exit 1    
+fi
+
+if [[ -w ${PATHOFCONFIGIONKMASTER} ]];
+then
+    echo > /dev/null
+else 
+   echo "Error: file ${PATHOFCONFIGIONKMASTER} does not exists or you don't have permissions"
+   exit 1   
+fi
+
+function reload {
+    kill -USR2 $(pgrep Suricata-Main)
+}
+
+function disablerule {
+   # disable rule
+   NUMBEROFLINE=`grep -n "sid:${SID}" ${PATHFORULES}* | cut -f 2 -d :`
+   FILEWITHRULE=`grep -n "sid:${SID}" ${PATHFORULES}* | cut -f 1 -d :`
+   # check state of rule
+   grep "disablesid ${SID}" ${PATHOFCONFIGIONKMASTER} > /dev/null
+   RESULT=$?
+   if [[ $RESULT == 0 ]];
+   then   
+       echo "Rule with sid ${SID} already disabled"
+	   exit 0
+	fi
+	if [[ $RESULT == 1 ]];
+	then
+	    sed -i "${NUMBEROFLINE} s/^/#/" ${FILEWITHRULE}
+		echo "disablesid ${SID}" >> ${PATHOFCONFIGIONKMASTER}
+		if [[ ${RELOAD} == 0 ]];
+	    then
+	       reload
+		fi
+		echo "Rule with sid ${SID} was successful disable"
+	fi
+
+}
+	
+function enablerule {
+   # enable rule
+   NUMBEROFLINE=`grep -n "sid:${SID}" ${PATHFORULES}* | cut -f 2 -d :`
+   FILEWITHRULE=`grep -n "sid:${SID}" ${PATHFORULES}* | cut -f 1 -d :`
+   grep "disablesid ${SID}" ${PATHOFCONFIGIONKMASTER} > /dev/null
+   RESULT=$?
+   if [[ $RESULT == 1 ]];
+   then
+       echo "Rule with sid ${SID} already enabled"
+	   exit 0
+   fi   
+   if [[ $RESULT == 0 ]];
+   then
+       sed -i "${NUMBEROFLINE} s/^#*//" $FILEWITHRULE
+       sed -i "s/^disablesid ${SID}//" ${PATHOFCONFIGIONKMASTER}
+	   if [[ ${RELOAD} == 0 ]];
+	   then
+	       reload
+	   fi
+       echo "Rule with sid ${SID} was successful enable"
+	   exit 0
+	fi 
+ 
+}
+
+case "${ACTIONWITHRULE}" in
+    "enable")
+            enablerule            
+     ;;
+     "disable")
+            disablerule            
+     ;;
+    *)
+            echo "Suricata rules manager"
+            echo "Use: {enable | disable} {SID} [reload]"
+            exit 1
+     ;;
+esac
